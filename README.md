@@ -34,13 +34,9 @@ It provides a 3D interactive viewer with IK target manipulation, trajectory play
 
 ### 🖼️ Preview
 
-Add media files under `docs/assets/` and link them here.
+![Robot Kinematic Viewer — interactive 3D view, IK, and playback](assets/gui_viewer.png)
 
-Suggested file names:
-
-- `docs/assets/overview.png` (main UI screenshot)
-- `docs/assets/ik_demo.gif` (IK dragging demo)
-- `docs/assets/playback_demo.gif` (trajectory playback demo)
+Additional screenshots or short clips can live under `docs/assets/` if you want to split demos by feature (for example `overview.png`, `ik_demo.gif`, `playback_demo.gif`).
 
 ### 🧠 Core Workflow
 
@@ -154,13 +150,9 @@ Useful options:
 
 ### 🖼️ 预览
 
-把素材放到 `docs/assets/` 后可直接在这里展示。
+![Robot Kinematic Viewer — 交互 3D、IK 与回放](assets/robot_kinematic_viewer.gif)
 
-建议文件名：
-
-- `docs/assets/overview.png`（主界面截图）
-- `docs/assets/ik_demo.gif`（IK 拖拽演示）
-- `docs/assets/playback_demo.gif`（轨迹回放演示）
+如需按功能拆分展示，可把更多截图或短视频放在 `docs/assets/`（例如 `overview.png`、`ik_demo.gif`、`playback_demo.gif`）。
 
 ### 🧠 核心流程
 

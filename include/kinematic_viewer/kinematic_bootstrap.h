@@ -8,6 +8,7 @@ namespace kinematic_viewer {
 
     struct LaunchConfig {
         KinematicViewerConfig config;
+        std::string configPath;
         std::string urdfPath;
     };
 

@@ -377,6 +377,76 @@ namespace omnilink::teleop_viewer {
         return true;
     }
 
+    bool IkSolver::querySingleChain(int chainIndex, const glm::mat4& targetWorld, const glm::mat4& baseWorld,
+                                    const std::vector<float>& seedJointPositions, std::vector<float>* outSolution,
+                                    std::string* statusText) const {
+        if (chainIndex < 0 || chainIndex >= chainCount()) {
+            if (statusText) {
+                *statusText = "IK失败：未选择链";
+            }
+            return false;
+        }
+
+        const auto& chainRuntime = chains_[chainIndex];
+        if (!chainRuntime.status.ready || chainRuntime.solver == nullptr) {
+            if (statusText) {
+                *statusText = "IK失败：链未就绪";
+            }
+            return false;
+        }
+
+        // Convert target to base frame
+        const glm::mat4 targetInBase = glm::inverse(baseWorld) * targetWorld;
+        const KDL::Frame target      = glmToKdlFrame(targetInBase);
+
+        // Build seed from provided positions or use neutral pose
+        const size_t jointCount = chainRuntime.jointNames.size();
+        KDL::JntArray seed(jointCount);
+        if (seedJointPositions.size() == jointCount) {
+            for (size_t i = 0; i < jointCount; ++i) {
+                seed(i) = std::min(chainRuntime.upper(i), std::max(chainRuntime.lower(i), static_cast<double>(seedJointPositions[i])));
+            }
+        } else {
+            for (size_t i = 0; i < jointCount; ++i) {
+                seed(i) = 0.5 * (chainRuntime.lower(i) + chainRuntime.upper(i));
+            }
+        }
+
+        KDL::JntArray output(jointCount);
+        int rc = chainRuntime.solver->CartToJnt(seed, target, output);
+        if (rc < 0) {
+            // Retry with perturbed target
+            for (int i = 0; i < 8; ++i) {
+                KDL::Frame perturbed = target;
+                const double dp      = 0.004 * static_cast<double>(i + 1);
+                perturbed.p.x(target.p.x() + dp);
+                perturbed.p.y(target.p.y() - dp);
+                rc = chainRuntime.solver->CartToJnt(seed, perturbed, output);
+                if (rc >= 0) {
+                    break;
+                }
+            }
+        }
+        if (rc < 0) {
+            if (statusText) {
+                *statusText = "IK失败：不可达/超时（已做扰动重试）";
+            }
+            return false;
+        }
+
+        if (outSolution != nullptr) {
+            outSolution->resize(jointCount);
+            for (size_t i = 0; i < jointCount; ++i) {
+                (*outSolution)[i] = static_cast<float>(output(i));
+            }
+        }
+
+        if (statusText) {
+            *statusText = "IK成功";
+        }
+        return true;
+    }
+
     bool IkSolver::initializeFullBodySolvers(const std::string& urdfPath, const std::vector<ViewerIkChainConfig>& chains) {
         (void)urdfPath;
         fullBodyReady_     = false;

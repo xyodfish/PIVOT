@@ -48,6 +48,19 @@ namespace omnilink::teleop_viewer {
 
         bool solveSingleChain(RobotScene* scene, int chainIndex, const glm::mat4& targetWorld, std::string* statusText);
 
+        /**
+         * @brief Query IK solution for a single chain without modifying the scene.
+         * @param chainIndex Index of the chain to solve
+         * @param targetWorld Target transform in world coordinates
+         * @param baseWorld Base link transform in world coordinates (used to convert target to base frame)
+         * @param seedJointPositions Seed joint positions (must match chain joint count). If empty, uses neutral pose.
+         * @param outSolution Output joint positions on success
+         * @param outStatusText Optional status message
+         * @return true if IK succeeded
+         */
+        bool querySingleChain(int chainIndex, const glm::mat4& targetWorld, const glm::mat4& baseWorld,
+                              const std::vector<float>& seedJointPositions, std::vector<float>* outSolution, std::string* statusText) const;
+
         bool solveFullBody(RobotScene* scene, const std::vector<glm::mat4>& targetWorldByChain, int iterations, int activeChainIndex,
                            bool fastMode, bool positionOnlyMode, IkSolveStats* stats, std::string* statusText);
 

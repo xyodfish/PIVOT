@@ -1,5 +1,8 @@
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
+#include "kinematic_viewer/kinematic_path_planner.h"
+#include "kinematic_viewer/kinematic_string_utils.h"
 
+#include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
 
 #include "imgui.h"
@@ -7,12 +10,10 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <sstream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -20,20 +21,11 @@
 namespace kinematic_viewer {
     namespace kinematic_sidebar_panels_internal {
 
-        std::string NormalizePath(const std::string& path) {
-            std::error_code ec;
-            std::filesystem::path p(path);
-            auto normalized = std::filesystem::weakly_canonical(p, ec);
-            if (!ec) {
-                return normalized.string();
-            }
-            return p.lexically_normal().string();
-        }
+        using kinematic_viewer::NormalizePath;
 
         bool IsTrajectoryFileExt(const std::filesystem::path& path) {
-            std::string ext = path.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-            return ext == ".yaml" || ext == ".yml" || ext == ".csv";
+            const std::string ext = LowerFileExtension(path.string());
+            return ext == ".csv";
         }
 
         bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
@@ -282,10 +274,17 @@ namespace kinematic_viewer {
             return true;
         }
 
+        using kinematic_viewer::FileBrowserSortBy;
+        using kinematic_viewer::FormatFileSize;
+        using kinematic_viewer::FormatFileTime;
+
         void RenderTrajectoryFileBrowser(DebugPlaybackState* playbackState) {
             if (playbackState == nullptr) {
                 return;
             }
+
+            // Persistent sort state for this browser instance
+            static FileBrowserSortBy s_sort_by = FileBrowserSortBy::NameAsc;
 
             if (ImGui::Button("浏览本地文件")) {
                 const std::string defaultDir = NormalizePath(std::filesystem::current_path().string());
@@ -333,35 +332,136 @@ namespace kinematic_viewer {
             if (!std::filesystem::exists(browsePath, ec) || !std::filesystem::is_directory(browsePath, ec)) {
                 ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "目录不可用");
             } else {
-                std::vector<std::filesystem::path> dirs;
-                std::vector<std::filesystem::path> files;
+                struct DirEntry {
+                    std::filesystem::path path;
+                    std::string name;
+                    std::string size;
+                    std::string mtime;
+                    bool isDir = false;
+                };
+                std::vector<DirEntry> entries;
+
                 for (auto it = std::filesystem::directory_iterator(browsePath, ec); !ec && it != std::filesystem::directory_iterator();
                      ++it) {
-                    if (it->is_directory(ec)) {
-                        dirs.push_back(it->path());
-                    } else if (it->is_regular_file(ec) && IsTrajectoryFileExt(it->path())) {
-                        files.push_back(it->path());
+                    DirEntry entry;
+                    entry.path  = it->path();
+                    entry.name  = it->path().filename().string();
+                    entry.isDir = it->is_directory(ec);
+                    if (entry.isDir) {
+                        entry.size  = "-";
+                        entry.mtime = "-";
+                    } else {
+                        if (!IsTrajectoryFileExt(it->path())) {
+                            continue;
+                        }
+                        auto fsize  = it->file_size(ec);
+                        entry.size  = ec ? "-" : FormatFileSize(fsize);
+                        auto ftime  = it->last_write_time(ec);
+                        entry.mtime = ec ? "-" : FormatFileTime(ftime);
                     }
+                    entries.push_back(std::move(entry));
                 }
-                std::sort(dirs.begin(), dirs.end());
-                std::sort(files.begin(), files.end());
+                {
+                    const FileBrowserSortBy sort_by = s_sort_by;
+                    std::sort(entries.begin(), entries.end(), [sort_by](const DirEntry& a, const DirEntry& b) {
+                        if (a.isDir != b.isDir) {
+                            return a.isDir > b.isDir;
+                        }
+                        switch (sort_by) {
+                            case FileBrowserSortBy::SizeAsc:
+                                if (a.size != b.size) {
+                                    return a.size < b.size;
+                                }
+                                break;
+                            case FileBrowserSortBy::SizeDesc:
+                                if (a.size != b.size) {
+                                    return a.size > b.size;
+                                }
+                                break;
+                            case FileBrowserSortBy::TimeAsc:
+                                if (a.mtime != b.mtime) {
+                                    return a.mtime < b.mtime;
+                                }
+                                break;
+                            case FileBrowserSortBy::TimeDesc:
+                                if (a.mtime != b.mtime) {
+                                    return a.mtime > b.mtime;
+                                }
+                                break;
+                            case FileBrowserSortBy::NameDesc:
+                                return a.name > b.name;
+                            case FileBrowserSortBy::NameAsc:
+                            default:
+                                break;
+                        }
+                        return a.name < b.name;
+                    });
+                }
 
-                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(580, 280), true)) {
-                    for (const auto& d : dirs) {
-                        std::string label = "[DIR] " + d.filename().string();
-                        if (ImGui::Selectable(label.c_str(), false)) {
-                            std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s",
-                                          d.string().c_str());
+                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(720, 320), true)) {
+                    ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                    if (ImGui::BeginTable("file_browser_table", 3, tableFlags)) {
+                        ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch, 3.5f);
+                        ImGui::TableSetupColumn("大小", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                        ImGui::TableSetupColumn("修改时间", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+                        ImGui::TableHeadersRow();
+
+                        // Clickable headers for sorting
+                        for (int col = 0; col < 3; ++col) {
+                            ImGui::TableSetColumnIndex(col);
+                            const char* labels[3]           = {"名称", "大小", "修改时间"};
+                            const FileBrowserSortBy asc[3]  = {FileBrowserSortBy::NameAsc, FileBrowserSortBy::SizeAsc,
+                                                               FileBrowserSortBy::TimeAsc};
+                            const FileBrowserSortBy desc[3] = {FileBrowserSortBy::NameDesc, FileBrowserSortBy::SizeDesc,
+                                                               FileBrowserSortBy::TimeDesc};
+                            bool is_asc                     = (s_sort_by == asc[col]);
+                            bool is_desc                    = (s_sort_by == desc[col]);
+                            const char* arrow               = is_asc ? "▲" : (is_desc ? "▼" : "");
+                            char buf[32];
+                            std::snprintf(buf, sizeof(buf), "%s %s", labels[col], arrow);
+                            ImGui::TableHeader(buf);
+                            if (ImGui::IsItemClicked()) {
+                                if (is_asc) {
+                                    s_sort_by = desc[col];
+                                } else {
+                                    s_sort_by = asc[col];
+                                }
+                            }
                         }
-                    }
-                    for (const auto& f : files) {
-                        std::string label = f.filename().string();
-                        if (ImGui::Selectable(label.c_str(), false)) {
-                            const std::string selectedPath = f.string();
-                            std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s",
-                                          selectedPath.c_str());
-                            ImGui::CloseCurrentPopup();
+
+                        for (const auto& entry : entries) {
+                            ImGui::TableNextRow();
+
+                            ImGui::TableSetColumnIndex(0);
+                            std::string displayName = entry.isDir ? ("[DIR] " + entry.name) : entry.name;
+                            ImGui::PushStyleColor(ImGuiCol_Text,
+                                                  entry.isDir ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                            if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+                                if (entry.isDir) {
+                                    std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir),
+                                                  "%s", entry.path.string().c_str());
+                                } else {
+                                    // Add to trajectory file list instead of replacing single path
+                                    TrajectoryFileEntry newEntry;
+                                    newEntry.path   = entry.path.string();
+                                    newEntry.status = "未加载";
+                                    newEntry.loaded = false;
+                                    playbackState->trajectory_files.push_back(std::move(newEntry));
+                                    playbackState->selected_trajectory_index = static_cast<int>(playbackState->trajectory_files.size()) - 1;
+                                    std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s",
+                                                  entry.path.string().c_str());
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
+                            ImGui::PopStyleColor();
+
+                            ImGui::TableSetColumnIndex(1);
+                            ImGui::TextDisabled("%s", entry.size.c_str());
+
+                            ImGui::TableSetColumnIndex(2);
+                            ImGui::TextDisabled("%s", entry.mtime.c_str());
                         }
+                        ImGui::EndTable();
                     }
                     ImGui::EndChild();
                 }
@@ -642,10 +742,10 @@ namespace kinematic_viewer {
         }
     }
 
-    void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer,
+    void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
                              omnilink::teleop_viewer::RobotScene* scene,
                              const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints) {
-        if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr) {
+        if (playbackState == nullptr || playbackPlayer == nullptr || playback_sm == nullptr || scene == nullptr) {
             return;
         }
 
@@ -674,33 +774,101 @@ namespace kinematic_viewer {
         ImGui::Separator();
         ImGui::TextUnformatted("轨迹关键帧回放");
 
+        auto LoadSelectedTrajectory = [&](int index) {
+            if (index < 0 || index >= static_cast<int>(playbackState->trajectory_files.size())) {
+                return;
+            }
+            const std::string& path = playbackState->trajectory_files[index].path;
+            std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s", path.c_str());
+            const DebugPlaybackState previousState = *playbackState;
+            std::string ioError;
+            if (LoadTrajectoryFromFile(path, playbackState, &ioError)) {
+                std::string checkError;
+                if (!kinematic_sidebar_panels_internal::ValidateTrajectoryJointNames(*playbackState, joints, &checkError)) {
+                    *playbackState                                = previousState;
+                    playbackState->trajectory_files[index].status = "加载失败: " + checkError;
+                    playbackState->trajectory_files[index].loaded = false;
+                    playbackState->trajectory_io_status           = "加载失败: " + checkError;
+                    playbackState->trajectory_alert_message       = "该轨迹与当前机器人关节定义不匹配。";
+                    playbackState->trajectory_alert_detail        = checkError;
+                    playbackState->trajectory_alert_popup_pending = true;
+                } else {
+                    playbackState->trajectory_files[index].status = "加载成功";
+                    playbackState->trajectory_files[index].loaded = true;
+                    playbackPlayer->SampleAtCurrentTime(*playbackState, scene);
+                    playbackState->trajectory_io_status = "加载成功: " + path;
+                }
+            } else {
+                playbackState->trajectory_files[index].status = "加载失败: " + ioError;
+                playbackState->trajectory_files[index].loaded = false;
+                playbackState->trajectory_io_status           = "加载失败: " + ioError;
+                playbackState->trajectory_alert_message       = "轨迹文件加载失败，请检查路径或文件格式。";
+                playbackState->trajectory_alert_detail        = ioError;
+                playbackState->trajectory_alert_popup_pending = true;
+            }
+        };
+
         if (ImGui::CollapsingHeader("文件", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::DragFloat("关键帧间隔(s)", &playbackState->keyframe_interval_sec, 0.02f, 0.02f, 5.0f, "%.2f");
+
+            // Trajectory file list
+            if (!playbackState->trajectory_files.empty()) {
+                ImGui::TextUnformatted("轨迹文件列表:");
+                if (ImGui::BeginListBox("##trajectory_file_list", ImVec2(-1, 120))) {
+                    for (int i = 0; i < static_cast<int>(playbackState->trajectory_files.size()); ++i) {
+                        const auto& entry = playbackState->trajectory_files[i];
+                        std::filesystem::path p(entry.path);
+                        std::string label = p.filename().string();
+                        if (!entry.status.empty() && entry.status != "未加载") {
+                            label += " (" + entry.status + ")";
+                        }
+                        bool isSelected  = (playbackState->selected_trajectory_index == i);
+                        ImVec4 textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                        if (entry.loaded) {
+                            textColor = ImVec4(0.40f, 0.84f, 0.52f, 1.0f);
+                        } else if (!entry.status.empty() && entry.status.find("失败") != std::string::npos) {
+                            textColor = ImVec4(0.95f, 0.42f, 0.42f, 1.0f);
+                        }
+                        ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+                        if (ImGui::Selectable(label.c_str(), isSelected)) {
+                            playbackState->selected_trajectory_index = i;
+                        }
+                        ImGui::PopStyleColor();
+                        if (ImGui::IsItemHovered() && !entry.path.empty()) {
+                            ImGui::SetTooltip("%s", entry.path.c_str());
+                        }
+                    }
+                    ImGui::EndListBox();
+                }
+            }
+
+            // Buttons row
+            if (ImGui::Button("+ 添加")) {
+                kinematic_sidebar_panels_internal::RenderTrajectoryFileBrowser(playbackState);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("- 删除") && playbackState->selected_trajectory_index >= 0) {
+                playbackState->trajectory_files.erase(playbackState->trajectory_files.begin() + playbackState->selected_trajectory_index);
+                if (playbackState->selected_trajectory_index >= static_cast<int>(playbackState->trajectory_files.size())) {
+                    playbackState->selected_trajectory_index = static_cast<int>(playbackState->trajectory_files.size()) - 1;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("加载选中") && playbackState->selected_trajectory_index >= 0) {
+                LoadSelectedTrajectory(playbackState->selected_trajectory_index);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("清空列表")) {
+                playbackState->trajectory_files.clear();
+                playbackState->selected_trajectory_index = -1;
+            }
+
             ImGui::InputText("轨迹文件", playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path));
             ImGui::SameLine();
             kinematic_sidebar_panels_internal::RenderTrajectoryFileBrowser(playbackState);
 
             if (ImGui::Button("加载轨迹文件")) {
-                const DebugPlaybackState previousState = *playbackState;
-                std::string ioError;
-                if (LoadTrajectoryFromFile(playbackState->trajectory_file_path, playbackState, &ioError)) {
-                    std::string checkError;
-                    if (!kinematic_sidebar_panels_internal::ValidateTrajectoryJointNames(*playbackState, joints, &checkError)) {
-                        *playbackState                                = previousState;
-                        playbackState->trajectory_io_status           = "加载失败: " + checkError;
-                        playbackState->trajectory_alert_message       = "该轨迹与当前机器人关节定义不匹配。";
-                        playbackState->trajectory_alert_detail        = checkError;
-                        playbackState->trajectory_alert_popup_pending = true;
-                    } else {
-                        playbackPlayer->SampleAtCurrentTime(*playbackState, scene);
-                        playbackState->trajectory_io_status = "加载成功";
-                    }
-                } else {
-                    playbackState->trajectory_io_status           = "加载失败: " + ioError;
-                    playbackState->trajectory_alert_message       = "轨迹文件加载失败，请检查路径或文件格式。";
-                    playbackState->trajectory_alert_detail        = ioError;
-                    playbackState->trajectory_alert_popup_pending = true;
-                }
+                LoadSelectedTrajectory(playbackState->selected_trajectory_index);
             }
             ImGui::SameLine();
             if (ImGui::Button("保存当前轨迹")) {
@@ -739,13 +907,13 @@ namespace kinematic_viewer {
                 playbackPlayer->RecordKeyframe(playbackState, joints, *scene);
             }
             ImGui::SameLine();
-            const bool playing = playbackState->mode == DebugPlaybackState::Mode::Playing;
+            const bool playing = playback_sm->IsPlaying();
             if (ImGui::Button(playing ? "暂停回放" : "开始回放")) {
-                playbackPlayer->TogglePlayPause(playbackState);
+                playback_sm->TogglePlayPause();
             }
             ImGui::SameLine();
             if (ImGui::Button("停止")) {
-                playbackPlayer->Stop(playbackState);
+                playback_sm->Stop();
             }
             ImGui::SameLine();
             if (ImGui::Button("清空")) {
@@ -766,9 +934,9 @@ namespace kinematic_viewer {
                 }
 
                 const char* modeLabel = "Stopped";
-                if (playbackState->mode == DebugPlaybackState::Mode::Playing) {
+                if (playback_sm->IsPlaying()) {
                     modeLabel = "Playing";
-                } else if (playbackState->mode == DebugPlaybackState::Mode::Paused) {
+                } else if (playback_sm->IsPaused()) {
                     modeLabel = "Paused";
                 }
                 int baseKeyframeCount = 0;
@@ -920,6 +1088,267 @@ namespace kinematic_viewer {
                 ImGui::Text("%.1f, %.1f, %.1f", glm::degrees(tf.world_rpy.x), glm::degrees(tf.world_rpy.y), glm::degrees(tf.world_rpy.z));
             }
             ImGui::EndTable();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Path Planner Panel
+    // ------------------------------------------------------------------
+    void RenderPathPlannerPanel(PathPlannerUiState* ui, DebugPlaybackState* playbackState, omnilink::teleop_viewer::RobotScene* scene,
+                                omnilink::teleop_viewer::IkSolver* solver,
+                                const std::vector<omnilink::teleop_viewer::IkChainStatus>& chains) {
+        if (ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
+            return;
+        }
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("路径规划");
+
+        // Chain selection
+        if (!chains.empty()) {
+            std::vector<const char*> chain_labels;
+            for (const auto& c : chains) {
+                chain_labels.push_back(c.config.label.c_str());
+            }
+            ImGui::Combo("控制链", &ui->selected_chain, chain_labels.data(), static_cast<int>(chain_labels.size()));
+        }
+
+        // Path type selection
+        const char* path_types[] = {"画圆", "画方", "头部往复", "直线", "关节空间PTP"};
+        ImGui::Combo("路径类型", &ui->selected_path_type, path_types, IM_ARRAYSIZE(path_types));
+
+        // IK mode selection (only for Cartesian path types)
+        if (ui->selected_path_type != 4) {
+            const char* ik_modes[] = {"Single Chain (TRAC-IK)", "Full Body (wbc_chain_ik)"};
+            ImGui::Combo("IK 模式", &ui->ik_mode, ik_modes, IM_ARRAYSIZE(ik_modes));
+            if (ui->ik_mode == 0) {
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "⚠ 单链模式可能出现关节跳变");
+            } else {
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "✓ 全身模式求解更稳定");
+            }
+        }
+
+        ImGui::Separator();
+
+        // Parameter panels based on path type
+        if (ui->selected_path_type == 0) {
+            ImGui::TextUnformatted("圆参数");
+            ImGui::InputFloat3("圆心 (m)", ui->circle_center, "%.3f");
+            ImGui::InputFloat("半径 (m)", &ui->circle_radius, 0.01f, 0.05f, "%.3f");
+            ui->circle_radius = std::max(0.01f, ui->circle_radius);
+            ImGui::InputFloat("周期 (s)", &ui->circle_period, 0.5f, 1.0f, "%.1f");
+            ui->circle_period = std::max(0.1f, ui->circle_period);
+            ImGui::InputInt("采样点数", &ui->circle_points);
+            ui->circle_points = std::max(3, ui->circle_points);
+        } else if (ui->selected_path_type == 1) {
+            ImGui::TextUnformatted("方参数");
+            ImGui::InputFloat3("中心 (m)", ui->square_center, "%.3f");
+            ImGui::InputFloat("边长 (m)", &ui->square_side, 0.01f, 0.05f, "%.3f");
+            ui->square_side = std::max(0.01f, ui->square_side);
+            ImGui::InputFloat("圆角半径 (m)", &ui->square_corner_r, 0.0f, 0.01f, "%.3f");
+            ui->square_corner_r = std::max(0.0f, std::min(ui->square_corner_r, ui->square_side * 0.4f));
+            ImGui::InputFloat("周期 (s)", &ui->square_period, 0.5f, 1.0f, "%.1f");
+            ui->square_period = std::max(0.1f, ui->square_period);
+            ImGui::InputInt("采样点数", &ui->square_points);
+            ui->square_points = std::max(4, ui->square_points);
+        } else if (ui->selected_path_type == 2) {
+            ImGui::TextUnformatted("头部往复参数");
+            ImGui::InputFloat("俯仰幅度 (deg)", &ui->head_pitch_amp_deg, 1.0f, 5.0f, "%.1f");
+            ui->head_pitch_amp_deg = std::max(1.0f, std::min(ui->head_pitch_amp_deg, 45.0f));
+            ImGui::InputFloat("周期 (s)", &ui->head_period, 0.5f, 1.0f, "%.1f");
+            ui->head_period = std::max(0.1f, ui->head_period);
+            ImGui::InputInt("采样点数", &ui->head_points);
+            ui->head_points = std::max(2, ui->head_points);
+        } else if (ui->selected_path_type == 3) {
+            ImGui::TextUnformatted("直线参数");
+            ImGui::InputFloat3("目标位置 (m)", ui->straight_goal, "%.3f");
+            ImGui::InputFloat("最大速度 (m/s)", &ui->straight_max_vel, 0.01f, 0.05f, "%.2f");
+            ui->straight_max_vel = std::max(0.01f, ui->straight_max_vel);
+            ImGui::InputFloat("最大加速度 (m/s^2)", &ui->straight_max_acc, 0.01f, 0.05f, "%.2f");
+            ui->straight_max_acc = std::max(0.01f, ui->straight_max_acc);
+        } else if (ui->selected_path_type == 4) {
+            ImGui::TextUnformatted("关节空间PTP参数");
+            ImGui::InputFloat("最大速度 (rad/s)", &ui->ptp_max_vel, 0.1f, 0.5f, "%.2f");
+            ui->ptp_max_vel = std::max(0.01f, ui->ptp_max_vel);
+            ImGui::InputFloat("最大加速度 (rad/s^2)", &ui->ptp_max_acc, 0.1f, 0.5f, "%.2f");
+            ui->ptp_max_acc = std::max(0.01f, ui->ptp_max_acc);
+            ImGui::InputFloat("最大加加速度 (rad/s^3)", &ui->ptp_max_jerk, 0.5f, 2.0f, "%.1f");
+            ui->ptp_max_jerk = std::max(0.1f, ui->ptp_max_jerk);
+            ImGui::InputFloat("采样步长 (s)", &ui->ptp_delta_t, 0.001f, 0.01f, "%.3f");
+            ui->ptp_delta_t            = std::max(0.001f, std::min(ui->ptp_delta_t, 0.1f));
+            const char* ptp_profiles[] = {"TVP (梯形)", "DSVP (双S)"};
+            ImGui::Combo("速度曲线", &ui->ptp_profile, ptp_profiles, IM_ARRAYSIZE(ptp_profiles));
+
+            // Per-joint goal offset inputs
+            auto joints = scene->getJointInfos();
+            if (!joints.empty()) {
+                ImGui::Separator();
+                ImGui::TextUnformatted("各关节目标偏移 (rad)");
+                if (ui->ptp_goal_offsets.size() != joints.size()) {
+                    ui->ptp_goal_offsets.resize(joints.size(), 0.0f);
+                }
+                for (size_t i = 0; i < joints.size(); ++i) {
+                    ImGui::PushID(static_cast<int>(i));
+                    float offset_deg = glm::degrees(ui->ptp_goal_offsets[i]);
+                    if (ImGui::DragFloat(joints[i].name.c_str(), &offset_deg, 0.5f, -180.0f, 180.0f, "%.1f deg")) {
+                        ui->ptp_goal_offsets[i] = glm::radians(offset_deg);
+                    }
+                    ImGui::PopID();
+                }
+            }
+        }
+
+        ImGui::Separator();
+
+        // Action buttons
+        if (ImGui::Button("生成路径并求解 IK")) {
+            if (ui->selected_path_type == 4) {
+                // Joint-space PTP: no IK needed, plan directly in joint space
+                auto joints = scene->getJointInfos();
+                if (joints.empty()) {
+                    ui->last_status = "错误: 场景没有关节";
+                } else {
+                    if (ui->ptp_goal_offsets.size() != joints.size()) {
+                        ui->ptp_goal_offsets.resize(joints.size(), 0.0f);
+                    }
+
+                    JointSpacePTPParams ptp_params;
+                    ptp_params.joint_names.reserve(joints.size());
+                    ptp_params.start_positions.reserve(joints.size());
+                    ptp_params.goal_positions.reserve(joints.size());
+                    for (size_t i = 0; i < joints.size(); ++i) {
+                        ptp_params.joint_names.push_back(joints[i].name);
+                        ptp_params.start_positions.push_back(joints[i].position);
+                        ptp_params.goal_positions.push_back(joints[i].position + ui->ptp_goal_offsets[i]);
+                    }
+                    ptp_params.max_vel  = ui->ptp_max_vel;
+                    ptp_params.max_acc  = ui->ptp_max_acc;
+                    ptp_params.max_jerk = ui->ptp_max_jerk;
+                    ptp_params.delta_t  = ui->ptp_delta_t;
+                    ptp_params.profile  = (ui->ptp_profile == 0) ? "TVP" : "DSVP";
+
+                    auto joint_traj = planJointSpacePTP(ptp_params);
+                    if (!joint_traj.success) {
+                        ui->last_status = joint_traj.status;
+                    } else {
+                        // Convert to playback keyframes
+                        playbackState->keyframes.clear();
+                        for (size_t i = 0; i < joint_traj.times.size(); ++i) {
+                            PoseKeyframe kf;
+                            kf.t = joint_traj.times[i];
+                            for (size_t j = 0; j < joint_traj.joint_names.size(); ++j) {
+                                kf.joints[joint_traj.joint_names[j]] = joint_traj.joint_positions[i][j];
+                            }
+                            playbackState->keyframes.push_back(std::move(kf));
+                        }
+                        playbackState->selected_keyframe_index = 0;
+                        playbackState->play_time               = 0.0f;
+                        ui->preview_waypoints.clear();  // No Cartesian preview for joint-space PTP
+                        ui->last_status = joint_traj.status + ", 已加载到回放";
+                    }
+                }
+            } else {
+                // Cartesian path planning + IK (async)
+                glm::vec3 tip_pos(0.0f);
+                glm::vec3 tip_rpy(0.0f);
+                if (!solver->fetchTipWorldPose(*scene, ui->selected_chain, &tip_pos, &tip_rpy)) {
+                    ui->last_status = "错误: 无法获取当前末端位姿";
+                } else {
+                    glm::quat tip_quat = glm::quat(glm::vec3(tip_rpy.x, tip_rpy.y, tip_rpy.z));
+
+                    std::unique_ptr<CartesianPathPlanner> planner;
+                    if (ui->selected_path_type == 0) {
+                        CirclePathParams params;
+                        params.center     = glm::vec3(ui->circle_center[0], ui->circle_center[1], ui->circle_center[2]);
+                        params.radius     = ui->circle_radius;
+                        params.period_sec = ui->circle_period;
+                        params.num_points = ui->circle_points;
+                        planner           = makeCirclePlanner(params);
+                    } else if (ui->selected_path_type == 1) {
+                        SquarePathParams params;
+                        params.center        = glm::vec3(ui->square_center[0], ui->square_center[1], ui->square_center[2]);
+                        params.side_length   = ui->square_side;
+                        params.corner_radius = ui->square_corner_r;
+                        params.period_sec    = ui->square_period;
+                        params.num_points    = ui->square_points;
+                        planner              = makeSquarePlanner(params);
+                    } else if (ui->selected_path_type == 2) {
+                        HeadBobParams params;
+                        params.pitch_amplitude_deg = ui->head_pitch_amp_deg;
+                        params.period_sec          = ui->head_period;
+                        params.num_points          = ui->head_points;
+                        planner                    = makeHeadBobPlanner(params);
+                    } else {
+                        StraightPathParams params;
+                        params.start_pos  = tip_pos;
+                        params.goal_pos   = glm::vec3(ui->straight_goal[0], ui->straight_goal[1], ui->straight_goal[2]);
+                        params.start_quat = tip_quat;
+                        params.max_vel    = ui->straight_max_vel;
+                        params.max_acc    = ui->straight_max_acc;
+                        planner           = makeStraightPlanner(params);
+                    }
+
+                    auto cart_result = planner->plan(tip_pos, tip_quat);
+                    if (!cart_result.success) {
+                        ui->last_status = cart_result.status;
+                        ui->preview_waypoints.clear();
+                    } else {
+                        // Store Cartesian path for 3D preview
+                        ui->preview_waypoints = cart_result.waypoints;
+
+                        // Solve IK synchronously
+                        JointSpaceTrajectory joint_traj;
+                        if (ui->ik_mode == 1) {
+                            joint_traj = solveIkForCartesianPathFullBody(cart_result, scene, solver, ui->selected_chain);
+                        } else {
+                            joint_traj = solveIkForCartesianPath(cart_result, scene, solver, ui->selected_chain);
+                        }
+
+                        if (!joint_traj.success) {
+                            ui->last_status = joint_traj.status;
+                        } else {
+                            // Convert to playback keyframes
+                            playbackState->keyframes.clear();
+                            for (size_t i = 0; i < joint_traj.times.size(); ++i) {
+                                PoseKeyframe kf;
+                                kf.t = joint_traj.times[i];
+                                for (size_t j = 0; j < joint_traj.joint_names.size(); ++j) {
+                                    kf.joints[joint_traj.joint_names[j]] = joint_traj.joint_positions[i][j];
+                                }
+                                playbackState->keyframes.push_back(std::move(kf));
+                            }
+                            playbackState->selected_keyframe_index = 0;
+                            playbackState->play_time               = 0.0f;
+                            ui->last_status                        = joint_traj.status + ", 已加载到回放";
+                        }
+                    }
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("导出 CSV")) {
+            if (playbackState->keyframes.empty()) {
+                ui->last_status = "错误: 没有可导出的轨迹";
+            } else {
+                // Convert keyframes to JointSpaceTrajectory and export
+                JointSpaceTrajectory traj;
+                for (const auto& kf : playbackState->keyframes) {
+                    traj.times.push_back(static_cast<float>(kf.t));
+                }
+                // ... export logic
+                ui->last_status = "导出功能待完善";
+            }
+        }
+
+        ImGui::Checkbox("3D 预览", &ui->show_preview);
+
+        if (!ui->last_status.empty()) {
+            ImVec4 color = ImVec4(0.6f, 0.95f, 0.6f, 1.0f);
+            if (ui->last_status.find("错误") != std::string::npos || ui->last_status.find("失败") != std::string::npos) {
+                color = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+            }
+            ImGui::TextColored(color, "%s", ui->last_status.c_str());
         }
     }
 

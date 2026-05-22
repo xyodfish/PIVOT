@@ -93,9 +93,33 @@ add_library(wbc_chain_ik_core
 target_include_directories(wbc_chain_ik_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik")
 target_link_libraries(wbc_chain_ik_core PUBLIC Eigen3::Eigen pinocchio::pinocchio)
 
+# Velocity Planning Library (from trajectory_planner_utils)
+add_library(velocity_planning
+    deps/vp/src/trapezoidal/trapezoidal_planner.cpp
+    deps/vp/src/double_s/double_s_planner.cpp
+    deps/vp/src/multi_velocity_planner.cpp
+    deps/vp/src/curve_interface/constant_jerk_trajectory.cpp
+    deps/vp/src/curve_interface/piecewise_trajectory.cpp
+    deps/vp/src/geometry_trajectory/straight_trajectory.cpp
+)
+target_include_directories(velocity_planning PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps/vp/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps/vp/include/vp"
+)
+if(EIGEN3_FOUND)
+    target_link_libraries(velocity_planning PUBLIC Eigen3::Eigen)
+endif()
+
 add_executable(robot_kinematic_viewer
     src/robot_kinematic_viewer.cpp
+    src/kinematic_viewer/kinematic_app.cpp
+    src/kinematic_viewer/kinematic_ik_controller.cpp
+    src/kinematic_viewer/kinematic_string_utils.cpp
     src/kinematic_viewer/kinematic_viewer_config.cpp
+    src/kinematic_viewer/kinematic_render_loop.cpp
+    src/kinematic_viewer/kinematic_input_handler.cpp
+    src/kinematic_viewer/kinematic_config_watcher.cpp
+    src/kinematic_viewer/kinematic_playback_state_machine.cpp
     src/kinematic_viewer/kinematic_bootstrap.cpp
     src/kinematic_viewer/kinematic_playback.cpp
     src/kinematic_viewer/kinematic_collision_monitor.cpp
@@ -109,6 +133,7 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_shader_utils.cpp
     src/kinematic_viewer/kinematic_line_renderer.cpp
     src/kinematic_viewer/kinematic_user_obstacles.cpp
+    src/kinematic_viewer/kinematic_path_planner.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
     deps/glad/glad.c
@@ -134,6 +159,7 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     ${trac_ik_LIBRARIES}
     flex_ik_core
     wbc_chain_ik_core
+    velocity_planning
     OpenGL::GL
     glfw
     GLEW::GLEW

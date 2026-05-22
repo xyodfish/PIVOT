@@ -1,14 +1,21 @@
+#include "kinematic_viewer/kinematic_app.h"
 #include "kinematic_viewer/kinematic_bootstrap.h"
 #include "kinematic_viewer/kinematic_collision_monitor.h"
+#include "kinematic_viewer/kinematic_ik_controller.h"
 #include "kinematic_viewer/kinematic_initial_pose.h"
 #include "kinematic_viewer/kinematic_line_renderer.h"
 #include "kinematic_viewer/kinematic_marker_target_state.h"
 #include "kinematic_viewer/kinematic_marker_utils.h"
 #include "kinematic_viewer/kinematic_playback.h"
+#include "kinematic_viewer/kinematic_playback_state_machine.h"
+#include "kinematic_viewer/kinematic_render_loop.h"
+#include "kinematic_viewer/kinematic_input_handler.h"
+#include "kinematic_viewer/kinematic_config_watcher.h"
 #include "kinematic_viewer/kinematic_ros_bridge.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
 #include "kinematic_viewer/kinematic_shader_utils.h"
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
+#include "kinematic_viewer/kinematic_string_utils.h"
 #include "kinematic_viewer/kinematic_ui_feedback.h"
 #include "kinematic_viewer/kinematic_ui_theme.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
@@ -20,6 +27,8 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+
+#include <glad/glad.h>
 
 #include <GLFW/glfw3.h>
 
@@ -48,17 +57,20 @@ using kinematic_viewer::DebugPlaybackState;
 using kinematic_viewer::DestroyUserObstacleGpuMeshes;
 using kinematic_viewer::distancePointToSegment2D;
 using kinematic_viewer::DrawUserObstacles;
-using kinematic_viewer::EnsureMarkerTargetInitialized;
+using kinematic_viewer::GetScrollDelta;
 using kinematic_viewer::IkState;
 using kinematic_viewer::InitialPoseApplyResult;
 using kinematic_viewer::InitUserObstacleGpuMeshes;
+using kinematic_viewer::KinematicApp;
+using kinematic_viewer::KinematicIkController;
+using kinematic_viewer::KinematicInputHandler;
 using kinematic_viewer::KinematicLineRenderer;
 using kinematic_viewer::KinematicLineVertex;
+using kinematic_viewer::KinematicRenderLoop;
 using kinematic_viewer::KinematicRosBridge;
 using kinematic_viewer::KinematicUiFeedback;
 using kinematic_viewer::KinematicViewerConfig;
 using kinematic_viewer::LaunchConfig;
-using kinematic_viewer::LoadActiveMarkerFromTarget;
 using kinematic_viewer::LoadLaunchConfigFromArgs;
 using kinematic_viewer::markerWorldMatrix;
 using kinematic_viewer::MergeUserObstaclesIntoCollisionResult;
@@ -68,7 +80,6 @@ using kinematic_viewer::RenderPlaybackPanel;
 using kinematic_viewer::RenderSafetyPanel;
 using kinematic_viewer::RenderScenePanel;
 using kinematic_viewer::RenderTfPanel;
-using kinematic_viewer::SaveActiveMarkerToTarget;
 using kinematic_viewer::TrajectoryPlayer;
 using kinematic_viewer::UiSemanticLevel;
 using kinematic_viewer::UserObstacleGpuMeshes;
@@ -80,86 +91,6 @@ using omnilink::teleop_viewer::OrbitCamera;
 using omnilink::teleop_viewer::RobotScene;
 
 namespace robot_kinematic_viewer_internal {
-
-    float g_scroll_delta = 0.0f;
-
-    void ScrollCallback(GLFWwindow*, double, double yoffset) {
-        g_scroll_delta += static_cast<float>(yoffset);
-    }
-
-    bool ParsePoseInputXyzQuat(const char* text, glm::vec3* out_pos, glm::quat* out_quat, std::string* out_error) {
-        if (text == nullptr || out_pos == nullptr || out_quat == nullptr) {
-            if (out_error != nullptr) {
-                *out_error = "输入为空";
-            }
-            return false;
-        }
-        float x = 0.0f, y = 0.0f, z = 0.0f;
-        float qx = 0.0f, qy = 0.0f, qz = 0.0f, qw = 1.0f;
-        int consumed      = 0;
-        const int matched = std::sscanf(text, " %f , %f , %f , %f , %f , %f , %f %n", &x, &y, &z, &qx, &qy, &qz, &qw, &consumed);
-        if (matched != 7) {
-            if (out_error != nullptr) {
-                *out_error = "格式错误，应为 x,y,z,qx,qy,qz,qw";
-            }
-            return false;
-        }
-        if (text[consumed] != '\0') {
-            if (out_error != nullptr) {
-                *out_error = "格式错误：包含多余字符";
-            }
-            return false;
-        }
-
-        const glm::quat q_in(qw, qx, qy, qz);
-        const float norm = glm::length(q_in);
-        if (norm < 1e-6f) {
-            if (out_error != nullptr) {
-                *out_error = "四元数范数过小";
-            }
-            return false;
-        }
-        if (std::fabs(norm - 1.0f) > 1e-3f) {
-            if (out_error != nullptr) {
-                char buf[128];
-                std::snprintf(buf, sizeof(buf), "四元数未归一化，当前范数=%.6f", norm);
-                *out_error = buf;
-            }
-            return false;
-        }
-
-        *out_pos  = glm::vec3(x, y, z);
-        *out_quat = glm::normalize(q_in);
-        return true;
-    }
-
-    std::string FormatPoseInputXyzQuat(const glm::vec3& pos, const glm::quat& quat) {
-        const glm::quat q = glm::normalize(quat);
-        char buf[196];
-        std::snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f", pos.x, pos.y, pos.z, q.x, q.y, q.z, q.w);
-        return std::string(buf);
-    }
-
-    int HandleSidebarHotkeys(int current_page, bool enable_hotkeys) {
-        if (!enable_hotkeys) {
-            return current_page;
-        }
-        if (ImGui::IsKeyPressed(ImGuiKey_1))
-            return 0;
-        if (ImGui::IsKeyPressed(ImGuiKey_2))
-            return 1;
-        if (ImGui::IsKeyPressed(ImGuiKey_3))
-            return 2;
-        if (ImGui::IsKeyPressed(ImGuiKey_4))
-            return 3;
-        if (ImGui::IsKeyPressed(ImGuiKey_5))
-            return 4;
-        if (ImGui::IsKeyPressed(ImGuiKey_6))
-            return 5;
-        if (ImGui::IsKeyPressed(ImGuiKey_7))
-            return 6;
-        return current_page;
-    }
 
     bool ComputeWorldRayFromScreen(float mouse_x, float mouse_y, int viewport_w, int viewport_h, const glm::mat4& view,
                                    const glm::mat4& proj, glm::vec3* out_origin, glm::vec3* out_dir) {
@@ -229,14 +160,11 @@ namespace robot_kinematic_viewer_internal {
 
 }  // namespace robot_kinematic_viewer_internal
 
+using kinematic_viewer::FormatPoseInputXyzQuat;
+using kinematic_viewer::ParsePoseInputXyzQuat;
 using robot_kinematic_viewer_internal::ComputeWorldRayFromScreen;
-using robot_kinematic_viewer_internal::FormatPoseInputXyzQuat;
-using robot_kinematic_viewer_internal::g_scroll_delta;
-using robot_kinematic_viewer_internal::HandleSidebarHotkeys;
 using robot_kinematic_viewer_internal::IntersectRaySphere;
 using robot_kinematic_viewer_internal::ObstaclePickRadius;
-using robot_kinematic_viewer_internal::ParsePoseInputXyzQuat;
-using robot_kinematic_viewer_internal::ScrollCallback;
 
 int main(int argc, char** argv) {
     LaunchConfig launch;
@@ -250,43 +178,32 @@ int main(int argc, char** argv) {
     KinematicViewerConfig cfg = launch.config;
     std::string urdf_path     = launch.urdfPath.empty() ? cfg.robot.urdf_path : launch.urdfPath;
 
-    if (!glfwInit()) {
-        std::cerr << "glfwInit failed\n";
-        return 1;
+    KinematicApp app;
+    {
+        auto init_result = app.Initialize(cfg);
+        if (!init_result.success) {
+            std::cerr << init_result.error << "\n";
+            return 1;
+        }
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow* window = glfwCreateWindow(cfg.window.width, cfg.window.height, "Robot Kinematic Debug Viewer", nullptr, nullptr);
-    if (!window) {
-        std::cerr << "create window failed\n";
-        glfwTerminate();
-        return 1;
-    }
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
-    glfwSetScrollCallback(window, ScrollCallback);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "glad init failed\n";
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        return 1;
-    }
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    kinematic_viewer::SetupKinematicViewerFonts(cfg);
     int ui_theme_index = kinematic_viewer::KinematicUiThemeIndexFromName(cfg.ui.theme_preset);
-    kinematic_viewer::ApplyKinematicUiStyleByIndex(ui_theme_index);
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    GLFWwindow* window = app.Window();
+
+    kinematic_viewer::ConfigWatcher config_watcher(launch.configPath.empty() ? "" : launch.configPath);
+    config_watcher.SetPollIntervalSec(2.0);
+    config_watcher.SetOnChanged([&](const KinematicViewerConfig& new_cfg) {
+        cfg            = new_cfg;
+        ui_theme_index = kinematic_viewer::KinematicUiThemeIndexFromName(cfg.ui.theme_preset);
+        kinematic_viewer::ApplyKinematicUiStyleByIndex(ui_theme_index);
+    });
 
     GLuint mesh_shader = createKinematicMeshProgram();
     GLuint line_shader = createKinematicLineProgram();
     KinematicLineRenderer line_renderer;
     line_renderer.init();
+
+    KinematicRenderLoop render_loop;
+    render_loop.line_renderer = &line_renderer;
 
     UserObstacleGpuMeshes obstacle_meshes;
     if (!InitUserObstacleGpuMeshes(&obstacle_meshes)) {
@@ -312,6 +229,7 @@ int main(int argc, char** argv) {
     camera.max_distance = cfg.camera.max_distance;
 
     ViewerState ui_state;
+    kinematic_viewer::PathPlannerUiState path_planner_ui;
     ui_state.lock_base         = cfg.ui.fix_base_like_mujoco;
     auto appendJointInputGroup = [&](const std::string& name, const std::vector<std::string>& joint_names) {
         if (joint_names.empty()) {
@@ -351,10 +269,26 @@ int main(int argc, char** argv) {
 
     IkState ik_state;
     DebugPlaybackState playback_state;
+    // Restore trajectory file list from config
+    for (const auto& path : cfg.playback.trajectory_files) {
+        kinematic_viewer::TrajectoryFileEntry entry;
+        entry.path   = path;
+        entry.status = "未加载";
+        entry.loaded = false;
+        playback_state.trajectory_files.push_back(std::move(entry));
+    }
+    if (!playback_state.trajectory_files.empty()) {
+        playback_state.selected_trajectory_index =
+            std::clamp(cfg.playback.selected_index, 0, static_cast<int>(playback_state.trajectory_files.size()) - 1);
+        std::snprintf(playback_state.trajectory_file_path, sizeof(playback_state.trajectory_file_path), "%s",
+                      playback_state.trajectory_files[playback_state.selected_trajectory_index].path.c_str());
+    }
+    kinematic_viewer::PlaybackStateMachine playback_sm(&playback_state);
     CollisionMonitorState collision_state;
     TrajectoryPlayer trajectory_player;
     CollisionMonitor collision_monitor;
     KinematicUiFeedback ui_feedback;
+    kinematic_viewer::KinematicIkController ik_controller(&ik_state);
     std::string last_playback_io_status;
     bool initial_pose_auto_apply_pending = cfg.initial_pose.enable && cfg.initial_pose.auto_apply_on_start;
     {
@@ -421,38 +355,28 @@ int main(int argc, char** argv) {
     double prev_y                 = 0.0;
     bool first_mouse              = true;
     bool obstacle_pick_left_prev  = false;
-    double last_frame_sec         = glfwGetTime();
     bool obstacle_gizmo_was_using = false;
     bool obstacle_gizmo_was_over  = false;
-
-    auto ensureMarkerTargetInitialized = [&](int chain_index) -> bool {
-        return EnsureMarkerTargetInitialized(&ik_state, &scene, chain_index);
-    };
-
-    auto loadActiveMarkerFromTarget = [&]() -> bool {
-        return LoadActiveMarkerFromTarget(&ik_state, &scene);
-    };
-
-    auto saveActiveMarkerToTarget = [&]() {
-        SaveActiveMarkerToTarget(&ik_state);
-    };
+    kinematic_viewer::KinematicInputHandler input_handler;
+    double last_frame_sec = glfwGetTime();
 
     if (!ik_state.chains.empty()) {
-        loadActiveMarkerFromTarget();
+        ik_controller.LoadActiveMarkerFromTarget(&scene);
     }
 
     auto applyConfiguredInitialPose = [&]() -> InitialPoseApplyResult {
         InitialPoseApplyResult result = kinematic_viewer::ApplyConfiguredInitialPose(cfg.initial_pose, &scene);
         ik_state.marker_initialized   = false;
         if (!ik_state.chains.empty()) {
-            loadActiveMarkerFromTarget();
+            ik_controller.LoadActiveMarkerFromTarget(&scene);
         }
         return result;
     };
 
-    while (!glfwWindowShouldClose(window)) {
+    while (!app.ShouldClose()) {
         ros_bridge.spinOnce();
-        glfwPollEvents();
+        app.PollEvents();
+        config_watcher.Poll();
         double now_sec = glfwGetTime();
         double dt_sec  = std::max(0.0, now_sec - last_frame_sec);
         last_frame_sec = now_sec;
@@ -466,15 +390,6 @@ int main(int argc, char** argv) {
 
         double x = 0.0, y = 0.0;
         glfwGetCursorPos(window, &x, &y);
-        if (first_mouse) {
-            prev_x      = x;
-            prev_y      = y;
-            first_mouse = false;
-        }
-        double dx = x - prev_x;
-        double dy = y - prev_y;
-        prev_x    = x;
-        prev_y    = y;
 
         int fb_w = 0, fb_h = 0;
         glfwGetFramebufferSize(window, &fb_w, &fb_h);
@@ -491,36 +406,34 @@ int main(int argc, char** argv) {
         ImGuizmo::BeginFrame();
 
         const bool sidebar_hotkeys_enabled = !ImGui::GetIO().WantTextInput && !ImGui::GetIO().WantCaptureKeyboard;
-        ui_state.sidebar_page              = HandleSidebarHotkeys(ui_state.sidebar_page, sidebar_hotkeys_enabled);
+        ui_state.sidebar_page              = input_handler.HandleSidebarHotkeys(ui_state.sidebar_page, sidebar_hotkeys_enabled);
 
-        bool mouse_in_viewport = (x >= 0.0 && x < static_cast<double>(viewport_w) && y >= 0.0 && y < static_cast<double>(viewport_h));
-        const bool block_camera_input    = ui_state.panel_resize_active;
-        const bool imgui_capturing_mouse = ImGui::GetIO().WantCaptureMouse;
-        if (mouse_in_viewport && !block_camera_input && !ik_state.dragging_marker && !ik_state.gizmo_was_using &&
-            !ik_state.gizmo_was_over && !obstacle_gizmo_was_using && !obstacle_gizmo_was_over && !imgui_capturing_mouse) {
-            bool left   = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-            bool middle = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
-            bool right  = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-            bool shift  = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-            if (left && !shift && !middle) {
-                camera.rotate(static_cast<float>(dx), static_cast<float>(dy));
-            } else if (middle || (shift && left)) {
-                camera.pan(static_cast<float>(dx), static_cast<float>(dy));
-            } else if (right) {
-                camera.dolly(static_cast<float>(-dy));
-            }
-            if (std::fabs(g_scroll_delta) > 1e-6f) {
-                camera.zoom(g_scroll_delta);
-                g_scroll_delta = 0.0f;
-            }
+        KinematicInputHandler::UpdateContext input_ctx;
+        input_ctx.mouse_x             = x;
+        input_ctx.mouse_y             = y;
+        input_ctx.viewport_w          = viewport_w;
+        input_ctx.viewport_h          = viewport_h;
+        input_ctx.imgui_wants_mouse   = ImGui::GetIO().WantCaptureMouse;
+        input_ctx.panel_resize_active = ui_state.panel_resize_active;
+        input_ctx.ik_gizmo_using      = ik_state.gizmo_was_using;
+        input_ctx.ik_gizmo_over       = ik_state.gizmo_was_over;
+        input_ctx.obs_gizmo_using     = obstacle_gizmo_was_using;
+        input_ctx.obs_gizmo_over      = obstacle_gizmo_was_over;
+        input_ctx.ik_dragging_marker  = ik_state.dragging_marker;
+        input_ctx.sidebar_page        = ui_state.sidebar_page;
+        input_ctx.scroll_delta        = GetScrollDelta();
+        input_ctx.left_mouse_down     = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        input_ctx.middle_mouse_down   = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+        input_ctx.right_mouse_down    = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        input_ctx.shift_key_down =
+            glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+        input_handler.UpdateCamera(&camera, input_ctx);
+
+        playback_sm.AdvanceTime(static_cast<float>(dt_sec));
+        if (playback_sm.IsPlaying()) {
+            trajectory_player.SampleAtCurrentTime(playback_state, &scene);
         }
-
-        glViewport(0, 0, viewport_w, viewport_h);
-        glEnable(GL_DEPTH_TEST);
-        glClearColor(0.90f, 0.92f, 0.96f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        trajectory_player.AdvanceAndApply(&playback_state, &scene, dt_sec);
 
         scene.setFixedBaseMode(ui_state.lock_base);
         scene.updateTransforms();
@@ -534,212 +447,37 @@ int main(int argc, char** argv) {
         glm::mat4 proj =
             glm::perspective(glm::radians(50.0f), static_cast<float>(viewport_w) / static_cast<float>(viewport_h), 0.05f, 80.0f);
         glm::mat4 view = camera.viewMatrix();
-        glm::vec3 eye  = camera.eye();
 
-        glUseProgram(mesh_shader);
-        glUniformMatrix4fv(glGetUniformLocation(mesh_shader, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
-        glUniformMatrix4fv(glGetUniformLocation(mesh_shader, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glm::vec3 light_pos = eye + glm::vec3(0.8f, 0.8f, 1.2f);
-        glUniform3f(glGetUniformLocation(mesh_shader, "lightPos"), light_pos.x, light_pos.y, light_pos.z);
-        glUniform3f(glGetUniformLocation(mesh_shader, "viewPos"), eye.x, eye.y, eye.z);
-        scene.draw(mesh_shader);
-        DrawUserObstacles(mesh_shader, ui_state.user_obstacles, obstacle_meshes, view, proj);
-
-        std::vector<KinematicLineVertex> axis_vertices;
-        if (ui_state.user_obstacles.selected_index >= 0 &&
-            ui_state.user_obstacles.selected_index < static_cast<int>(ui_state.user_obstacles.items.size())) {
-            const auto& selected_obs = ui_state.user_obstacles.items[static_cast<size_t>(ui_state.user_obstacles.selected_index)];
-            if (selected_obs.visible) {
-                const glm::vec3 hi_color(0.10f, 0.85f, 1.0f);
-                appendMarkerAxes(&axis_vertices, selected_obs.position, selected_obs.rpy_deg, 0.18f, true);
-                const float pick_r = ObstaclePickRadius(selected_obs);
-                appendCircle(&axis_vertices, selected_obs.position, glm::vec3(1.0f, 0.0f, 0.0f), pick_r, hi_color, 36);
-                appendCircle(&axis_vertices, selected_obs.position, glm::vec3(0.0f, 1.0f, 0.0f), pick_r, hi_color, 36);
-                appendCircle(&axis_vertices, selected_obs.position, glm::vec3(0.0f, 0.0f, 1.0f), pick_r, hi_color, 36);
-            }
-        }
-        {
-            float half = ui_state.grid_size;
-            int count  = std::max(2, ui_state.grid_count);
-            glm::vec3 grid_col(0.72f, 0.76f, 0.82f);
-            for (int i = 0; i <= count; ++i) {
-                float t = -half + 2.0f * half * (static_cast<float>(i) / static_cast<float>(count));
-                axis_vertices.push_back({glm::vec3(-half, t, 0.0f), grid_col});
-                axis_vertices.push_back({glm::vec3(half, t, 0.0f), grid_col});
-                axis_vertices.push_back({glm::vec3(t, -half, 0.0f), grid_col});
-                axis_vertices.push_back({glm::vec3(t, half, 0.0f), grid_col});
-            }
-        }
-        if (ui_state.show_world_axes) {
-            glm::vec3 o(0.0f);
-            float l = ui_state.world_axis_length;
-            axis_vertices.push_back({o, glm::vec3(1, 0, 0)});
-            axis_vertices.push_back({o + glm::vec3(l, 0, 0), glm::vec3(1, 0, 0)});
-            axis_vertices.push_back({o, glm::vec3(0, 1, 0)});
-            axis_vertices.push_back({o + glm::vec3(0, l, 0), glm::vec3(0, 1, 0)});
-            axis_vertices.push_back({o, glm::vec3(0, 0, 1)});
-            axis_vertices.push_back({o + glm::vec3(0, 0, l), glm::vec3(0, 0, 1)});
-        }
-        if (ui_state.show_axes) {
-            auto axes = scene.getJointAxisInfos(ui_state.show_revolute_only);
-            for (const auto& a : axes) {
-                if (!ui_state.show_non_revolute && !a.revolute) {
-                    continue;
-                }
-                glm::vec3 c  = a.revolute ? glm::vec3(1.0f, 0.82f, 0.1f) : glm::vec3(0.45f, 0.8f, 1.0f);
-                glm::vec3 p0 = a.world_origin - 0.5f * ui_state.axis_length * a.world_axis;
-                glm::vec3 p1 = a.world_origin + 0.5f * ui_state.axis_length * a.world_axis;
-                axis_vertices.push_back({p0, c});
-                axis_vertices.push_back({p1, c});
-            }
-        }
-        for (int i = 0; i < static_cast<int>(ik_state.marker_targets.size()); ++i) {
-            if (!ik_state.marker_targets[i].initialized && !ensureMarkerTargetInitialized(i)) {
-                continue;
-            }
-            const auto& target = ik_state.marker_targets[i];
-            appendMarkerAxes(&axis_vertices, target.pos, target.rpy_deg, 0.12f, i == ik_state.selected_chain);
-        }
-        // Old custom marker is removed; ImGuizmo provides the interactive manipulator.
+        KinematicRenderLoop::Context render_ctx;
+        render_ctx.viewport_w        = viewport_w;
+        render_ctx.viewport_h        = viewport_h;
+        render_ctx.mesh_shader       = mesh_shader;
+        render_ctx.line_shader       = line_shader;
+        render_ctx.scene             = &scene;
+        render_ctx.ui_state          = &ui_state;
+        render_ctx.ik_state          = &ik_state;
+        render_ctx.collision_state   = &collision_state;
+        render_ctx.collision_result  = &collision_result;
+        render_ctx.obstacle_meshes   = &obstacle_meshes;
+        render_ctx.camera            = &camera;
+        render_ctx.planned_path      = &path_planner_ui.preview_waypoints;
+        render_ctx.show_planned_path = path_planner_ui.show_preview;
+        render_loop.Render(render_ctx);
 
         auto applyIkForActiveChain = [&](bool force_orientation_lock, bool fast_mode, bool prefer_position_only_target) -> bool {
-            if (ik_state.selected_chain < 0 || ik_state.selected_chain >= static_cast<int>(ik_state.chains.size())) {
-                ik_state.last_status = "IK失败：未选择链";
-                return false;
-            }
-            const auto& chain_status = ik_state.chains[ik_state.selected_chain];
-            if (ik_state.solve_mode == "single_chain" && !chain_status.ready) {
-                ik_state.last_status = "IK失败：链未就绪";
-                return false;
-            }
-
-            if (force_orientation_lock || ik_state.lock_orientation) {
-                glm::vec3 tip_pos(0.0f);
-                glm::vec3 tip_rpy(0.0f);
-                if (ik_state.solver.fetchTipWorldPose(scene, ik_state.selected_chain, &tip_pos, &tip_rpy)) {
-                    ik_state.marker_rpy_deg[0] = glm::degrees(tip_rpy.x);
-                    ik_state.marker_rpy_deg[1] = glm::degrees(tip_rpy.y);
-                    ik_state.marker_rpy_deg[2] = glm::degrees(tip_rpy.z);
-                }
-            }
-            if (ik_state.solve_mode == "full_body" && fast_mode && prefer_position_only_target && !ik_state.lock_orientation) {
-                // Realtime full-body drag uses position-priority target for robustness.
-                glm::vec3 tip_pos(0.0f);
-                glm::vec3 tip_rpy(0.0f);
-                if (ik_state.solver.fetchTipWorldPose(scene, ik_state.selected_chain, &tip_pos, &tip_rpy)) {
-                    ik_state.marker_rpy_deg[0] = glm::degrees(tip_rpy.x);
-                    ik_state.marker_rpy_deg[1] = glm::degrees(tip_rpy.y);
-                    ik_state.marker_rpy_deg[2] = glm::degrees(tip_rpy.z);
-                }
-            }
-            saveActiveMarkerToTarget();
-
-            const glm::vec3 marker_pos(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-            const glm::vec3 marker_rpy_deg(ik_state.marker_rpy_deg[0], ik_state.marker_rpy_deg[1], ik_state.marker_rpy_deg[2]);
-            const glm::mat4 active_target_world = markerWorldMatrix(marker_pos, marker_rpy_deg);
-
-            if (ik_state.solve_mode == "full_body") {
-                std::vector<glm::mat4> targets_world(static_cast<size_t>(ik_state.chains.size()), glm::mat4(1.0f));
-                for (int i = 0; i < static_cast<int>(ik_state.chains.size()); ++i) {
-                    if (i == ik_state.selected_chain) {
-                        targets_world[static_cast<size_t>(i)] = active_target_world;
-                        continue;
-                    }
-
-                    glm::vec3 tip_pos(0.0f);
-                    glm::vec3 tip_rpy(0.0f);
-                    if (ik_state.solver.fetchTipWorldPose(scene, i, &tip_pos, &tip_rpy)) {
-                        const glm::vec3 tip_rpy_deg(glm::degrees(tip_rpy.x), glm::degrees(tip_rpy.y), glm::degrees(tip_rpy.z));
-                        targets_world[static_cast<size_t>(i)] = markerWorldMatrix(tip_pos, tip_rpy_deg);
-                    } else if (ensureMarkerTargetInitialized(i)) {
-                        const auto& target                    = ik_state.marker_targets[i];
-                        targets_world[static_cast<size_t>(i)] = markerWorldMatrix(target.pos, target.rpy_deg);
-                    } else {
-                        targets_world[static_cast<size_t>(i)] = active_target_world;
-                    }
-                }
-
-                IkSolveStats stats;
-                const int solve_iters = fast_mode ? 1 : std::max(1, ik_state.full_body_iterations);
-                if (ik_state.solver.solveFullBody(&scene, targets_world, solve_iters, ik_state.selected_chain, fast_mode,
-                                                  prefer_position_only_target, &stats, &ik_state.last_status)) {
-                    return true;
-                }
-                return false;
-            }
-
-            return ik_state.solver.solveSingleChain(&scene, ik_state.selected_chain, active_target_world, &ik_state.last_status);
+            return ik_controller.ApplyIkForActiveChain(&scene, force_orientation_lock, fast_mode, prefer_position_only_target);
         };
 
         auto refineActiveChainToMarker = [&]() -> bool {
-            if (ik_state.selected_chain < 0 || ik_state.selected_chain >= static_cast<int>(ik_state.chains.size())) {
-                return false;
-            }
-            const auto& chain_status = ik_state.chains[ik_state.selected_chain];
-            if (!chain_status.ready) {
-                return false;
-            }
-            const glm::vec3 marker_pos(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-            const glm::vec3 marker_rpy_deg(ik_state.marker_rpy_deg[0], ik_state.marker_rpy_deg[1], ik_state.marker_rpy_deg[2]);
-            const glm::mat4 target_world = markerWorldMatrix(marker_pos, marker_rpy_deg);
-            std::string refine_status;
-            const bool refined = ik_state.solver.solveSingleChain(&scene, ik_state.selected_chain, target_world, &refine_status);
-            if (refined) {
-                if (ik_state.last_status.empty()) {
-                    ik_state.last_status = "末端精修完成(single_chain)";
-                } else {
-                    ik_state.last_status += " | 末端精修完成(single_chain)";
-                }
-                return true;
-            }
-            if (!refine_status.empty()) {
-                if (ik_state.last_status.empty()) {
-                    ik_state.last_status = "末端精修失败: " + refine_status;
-                } else {
-                    ik_state.last_status += " | 末端精修失败: " + refine_status;
-                }
-            }
-            return false;
+            return ik_controller.RefineActiveChainToMarker(&scene);
         };
 
         auto activeChainPositionErrorMmToMarker = [&]() -> float {
-            if (ik_state.selected_chain < 0 || ik_state.selected_chain >= static_cast<int>(ik_state.chains.size())) {
-                return 0.0f;
-            }
-            glm::vec3 tip_pos(0.0f);
-            glm::vec3 tip_rpy(0.0f);
-            if (!ik_state.solver.fetchTipWorldPose(scene, ik_state.selected_chain, &tip_pos, &tip_rpy)) {
-                return 0.0f;
-            }
-            const glm::vec3 marker_pos(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-            return glm::length(marker_pos - tip_pos) * 1000.0f;
+            return ik_controller.ActiveChainPositionErrorMmToMarker(&scene);
         };
 
         // External RViz interactive marker target -> local marker -> IK.
-        if (ik_state.use_external_target && ik_state.external_target_dirty && !ik_state.dragging_marker) {
-            const glm::vec3 prev_marker_pos(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-            const glm::vec3 prev_marker_rpy_deg(ik_state.marker_rpy_deg[0], ik_state.marker_rpy_deg[1], ik_state.marker_rpy_deg[2]);
-            const glm::quat prev_marker_quat = glm::normalize(glm::quat_cast(markerWorldMatrix(prev_marker_pos, prev_marker_rpy_deg)));
-            const glm::quat target_quat      = glm::normalize(ik_state.external_target_quat);
-            float external_rotation_delta    = glm::abs(glm::angle(glm::inverse(prev_marker_quat) * target_quat));
-            if (external_rotation_delta > glm::pi<float>()) {
-                external_rotation_delta = glm::two_pi<float>() - external_rotation_delta;
-            }
-
-            ik_state.marker_pos[0] = ik_state.external_target_pos.x;
-            ik_state.marker_pos[1] = ik_state.external_target_pos.y;
-            ik_state.marker_pos[2] = ik_state.external_target_pos.z;
-            if (!ik_state.lock_orientation) {
-                glm::vec3 rpy              = glm::eulerAngles(ik_state.external_target_quat);
-                ik_state.marker_rpy_deg[0] = glm::degrees(rpy.x);
-                ik_state.marker_rpy_deg[1] = glm::degrees(rpy.y);
-                ik_state.marker_rpy_deg[2] = glm::degrees(rpy.z);
-            }
-            saveActiveMarkerToTarget();
-            const bool external_position_only = ik_state.external_target_position_only && external_rotation_delta < glm::radians(0.5f);
-            applyIkForActiveChain(false, false, external_position_only);
-            ik_state.external_target_dirty = false;
-        }
+        ik_controller.ApplyExternalTarget(&scene);
 
         // RViz-like manipulator via ImGuizmo
         // Draw gizmo directly on the foreground drawlist of the 3D viewport area.
@@ -785,7 +523,7 @@ int main(int argc, char** argv) {
         ImGuizmo::SetGizmoSizeClipSpace(ik_state.gizmo_size_clip_space);
         if (!obstacle_edit_active && ik_state.selected_chain >= 0 && ik_state.selected_chain < static_cast<int>(ik_state.chains.size())) {
             if (!ik_state.marker_initialized) {
-                loadActiveMarkerFromTarget();
+                ik_controller.LoadActiveMarkerFromTarget(&scene);
             }
 
             const glm::vec3 marker_pos(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
@@ -860,7 +598,7 @@ int main(int argc, char** argv) {
                     ik_state.marker_rpy_deg[1] = updated_rpy_deg.y;
                     ik_state.marker_rpy_deg[2] = updated_rpy_deg.z;
                 }
-                saveActiveMarkerToTarget();
+                ik_controller.SaveActiveMarkerToTarget();
                 ik_state.gizmo_pose_dirty = true;
             } else {
                 ik_state.dragging_marker = false;
@@ -911,139 +649,20 @@ int main(int argc, char** argv) {
         }
 
         // Click in 3D viewport to select nearest obstacle.
-        const bool obstacle_pick_enabled = (ui_state.sidebar_page == 0 || ui_state.sidebar_page == 6);
-        const bool left_now              = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-        const bool left_clicked          = left_now && !obstacle_pick_left_prev;
-        obstacle_pick_left_prev          = left_now;
-        if (obstacle_pick_enabled && left_clicked && mouse_in_viewport && !ImGui::GetIO().WantCaptureMouse && !ik_state.gizmo_was_using &&
-            !ik_state.gizmo_was_over && !obstacle_gizmo_was_using && !obstacle_gizmo_was_over) {
-            glm::vec3 ray_o(0.0f), ray_d(0.0f);
-            if (ComputeWorldRayFromScreen(static_cast<float>(x), static_cast<float>(y), viewport_w, viewport_h, view, proj, &ray_o,
-                                          &ray_d)) {
-                int best_index = -1;
-                float best_t   = 1e9f;
-                for (int i = 0; i < static_cast<int>(ui_state.user_obstacles.items.size()); ++i) {
-                    const auto& obs = ui_state.user_obstacles.items[static_cast<size_t>(i)];
-                    if (!obs.visible) {
-                        continue;
-                    }
-                    const float r = ObstaclePickRadius(obs);
-                    float hit_t   = 0.0f;
-                    if (IntersectRaySphere(ray_o, ray_d, obs.position, r, &hit_t) && hit_t < best_t) {
-                        best_t     = hit_t;
-                        best_index = i;
-                    }
-                }
-                if (best_index >= 0) {
-                    ui_state.user_obstacles.selected_index = best_index;
-                }
-            }
+        glm::mat4 pick_proj =
+            glm::perspective(glm::radians(50.0f), static_cast<float>(viewport_w) / static_cast<float>(viewport_h), 0.05f, 80.0f);
+        glm::mat4 pick_view = camera.viewMatrix();
+        auto obstacle_pick  = input_handler.UpdateObstaclePick(input_ctx, pick_view, pick_proj, ui_state.user_obstacles);
+        if (obstacle_pick.picked) {
+            ui_state.user_obstacles.selected_index = obstacle_pick.selected_index;
         }
 
-        // Marker hover/pick in viewport (screen-space)
+        // Marker hover/pick in viewport (screen-space) — disabled (false branch)
         if (false && ik_state.selected_chain >= 0 && ik_state.selected_chain < static_cast<int>(ik_state.chains.size()) &&
             !ImGui::GetIO().WantCaptureMouse) {
-            glm::vec3 m0(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-            bool okc                = false;
-            glm::vec2 sc            = worldToScreen(m0, view, proj, viewport_w, viewport_h, &okc);
-            float dist_px           = okc ? glm::length(glm::vec2(static_cast<float>(x), static_cast<float>(y)) - sc) : 1e9f;
-            bool in_view            = x <= viewport_w;
-            bool left_now           = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-            ik_state.marker_hovered = in_view && okc && dist_px < 36.0f;
-            if (ik_state.marker_hovered) {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            }
-            if (left_now && !ik_state.left_mouse_prev && ik_state.marker_hovered) {
-                ik_state.dragging_marker = true;
-                ik_state.drag_prev_x     = static_cast<float>(x);
-                ik_state.drag_prev_y     = static_cast<float>(y);
-                ik_state.drag_prev_valid = true;
-            }
-            if (!left_now) {
-                ik_state.dragging_marker = false;
-                ik_state.drag_prev_valid = false;
-            }
-            ik_state.left_mouse_prev = left_now;
-
-            if (ik_state.dragging_marker) {
-                glm::vec3 axis(1.0f, 0.0f, 0.0f);
-                if (ik_state.drag_mode == 2 || ik_state.drag_mode == 5)
-                    axis = glm::vec3(0.0f, 1.0f, 0.0f);
-                if (ik_state.drag_mode == 3 || ik_state.drag_mode == 6)
-                    axis = glm::vec3(0.0f, 0.0f, 1.0f);
-                if (ik_state.drag_mode == 0) {
-                    glm::vec3 eye_now = camera.eye();
-                    glm::vec3 forward = glm::normalize(camera.target - eye_now);
-                    glm::vec3 world_up(0.0f, 0.0f, 1.0f);
-                    glm::vec3 right = glm::cross(forward, world_up);
-                    if (glm::length(right) < 1e-6f)
-                        right = glm::vec3(1.0f, 0.0f, 0.0f);
-                    else
-                        right = glm::normalize(right);
-                    glm::vec3 up    = glm::normalize(glm::cross(right, forward));
-                    float scale     = std::max(0.00008f, camera.distance * 0.00018f) * ik_state.translate_sensitivity;
-                    glm::vec3 delta = right * static_cast<float>(dx) * scale - up * static_cast<float>(dy) * scale;
-                    ik_state.marker_pos[0] += delta.x;
-                    ik_state.marker_pos[1] += delta.y;
-                    ik_state.marker_pos[2] += delta.z;
-                } else {
-                    bool oka = false, okb = false;
-                    glm::vec2 sa = worldToScreen(m0, view, proj, viewport_w, viewport_h, &oka);
-                    glm::vec2 sb = worldToScreen(m0 + axis * 0.16f, view, proj, viewport_w, viewport_h, &okb);
-                    if (oka && okb) {
-                        glm::vec2 axis_px = sb - sa;
-                        float axis_px_len = glm::length(axis_px);
-                        if (axis_px_len > 1e-4f) {
-                            glm::vec2 mouse_delta(static_cast<float>(dx), static_cast<float>(dy));
-                            float delta_along_px = glm::dot(mouse_delta, axis_px / axis_px_len);
-                            if (ik_state.drag_mode >= 1 && ik_state.drag_mode <= 3) {
-                                float scale = std::max(0.00008f, camera.distance * 0.00018f) * ik_state.translate_sensitivity;
-                                float d     = delta_along_px * scale;
-                                ik_state.marker_pos[0] += axis.x * d;
-                                ik_state.marker_pos[1] += axis.y * d;
-                                ik_state.marker_pos[2] += axis.z * d;
-                            } else {
-                                int ridx = ik_state.drag_mode - 4;
-                                if (ridx >= 0 && ridx < 3) {
-                                    glm::vec2 center = sa;
-                                    glm::vec2 v0(ik_state.drag_prev_x - center.x, ik_state.drag_prev_y - center.y);
-                                    glm::vec2 v1(static_cast<float>(x) - center.x, static_cast<float>(y) - center.y);
-                                    float l0 = glm::length(v0);
-                                    float l1 = glm::length(v1);
-                                    if (ik_state.drag_prev_valid && l0 > 1.0f && l1 > 1.0f) {
-                                        v0 /= l0;
-                                        v1 /= l1;
-                                        float c   = glm::clamp(glm::dot(v0, v1), -1.0f, 1.0f);
-                                        float ang = std::acos(c);
-                                        float sgn = (v0.x * v1.y - v0.y * v1.x) >= 0.0f ? 1.0f : -1.0f;
-                                        float deg = glm::degrees(ang) * sgn * ik_state.rotate_sensitivity;
-                                        ik_state.marker_rpy_deg[ridx] += deg;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                ik_state.drag_prev_x     = static_cast<float>(x);
-                ik_state.drag_prev_y     = static_cast<float>(y);
-                ik_state.drag_prev_valid = true;
-                saveActiveMarkerToTarget();
-                applyIkForActiveChain(false, false, false);
-            }
+            // This block is disabled. If re-enabled, view/proj matrices need to be recomputed here
+            // since they are no longer kept in the main loop scope after KinematicRenderLoop refactoring.
         }
-        if (collision_state.enable && collision_state.show_closest_pair_line && collision_state.has_valid_distance) {
-            glm::vec3 line_color(0.20f, 0.95f, 0.20f);
-            if (collision_state.nearest_surface_distance_m <= collision_state.danger_distance_m) {
-                line_color = glm::vec3(1.0f, 0.25f, 0.25f);
-            } else if (collision_state.nearest_surface_distance_m <= collision_state.warning_distance_m) {
-                line_color = glm::vec3(1.0f, 0.75f, 0.25f);
-            }
-            axis_vertices.push_back({collision_state.nearest_point_a, line_color});
-            axis_vertices.push_back({collision_state.nearest_point_b, line_color});
-        }
-
-        line_renderer.draw(line_shader, axis_vertices, view, proj, ui_state.axis_line_width);
-
         glViewport(viewport_w, 0, panel_w, fb_h);
         glDisable(GL_DEPTH_TEST);
         ImGui::SetNextWindowPos(ImVec2(static_cast<float>(viewport_w), 0.0f), ImGuiCond_Always);
@@ -1123,10 +742,10 @@ int main(int argc, char** argv) {
         {
             auto playbackLevel        = UiSemanticLevel::Info;
             const char* playbackLabel = "回放 STOP";
-            if (playback_state.mode == DebugPlaybackState::Mode::Playing) {
+            if (playback_sm.IsPlaying()) {
                 playbackLevel = UiSemanticLevel::Success;
                 playbackLabel = "回放 PLAY";
-            } else if (playback_state.mode == DebugPlaybackState::Mode::Paused) {
+            } else if (playback_sm.IsPaused()) {
                 playbackLevel = UiSemanticLevel::Warning;
                 playbackLabel = "回放 PAUSE";
             }
@@ -1165,7 +784,7 @@ int main(int argc, char** argv) {
             int index;
         };
         const SidebarTab sidebar_tabs[] = {
-            {"场景", 0}, {"IK", 1}, {"回放", 2}, {"安全", 3}, {"关节", 4}, {"TF", 5}, {"障碍", 6},
+            {"场景", 0}, {"IK", 1}, {"回放", 2}, {"安全", 3}, {"关节", 4}, {"TF", 5}, {"障碍", 6}, {"规划", 7},
         };
         ImGui::TextUnformatted("子页");
         float avail_w = ImGui::GetContentRegionAvail().x;
@@ -1217,7 +836,7 @@ int main(int argc, char** argv) {
                 }
                 if (ImGui::Combo("控制链", &ik_state.selected_chain, chain_labels.data(), static_cast<int>(chain_labels.size()))) {
                     ik_state.marker_initialized = false;
-                    loadActiveMarkerFromTarget();
+                    ik_controller.LoadActiveMarkerFromTarget(&scene);
                 }
                 int solve_mode_index           = (ik_state.solve_mode == "full_body") ? 1 : 0;
                 const char* solve_mode_items[] = {"single_chain（单链）", "full_body（全身）"};
@@ -1261,7 +880,7 @@ int main(int argc, char** argv) {
                     ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "IK链不可用: %s", chain_status.error.c_str());
                 } else {
                     if (!ik_state.marker_initialized) {
-                        loadActiveMarkerFromTarget();
+                        ik_controller.LoadActiveMarkerFromTarget(&scene);
                     }
                     if (ImGui::CollapsingHeader("Gizmo与拖动", ImGuiTreeNodeFlags_DefaultOpen)) {
                         ImGui::Checkbox("锁定末端姿态", &ik_state.lock_orientation);
@@ -1324,10 +943,9 @@ int main(int argc, char** argv) {
                     if (ImGui::CollapsingHeader("目标位姿与求解", ImGuiTreeNodeFlags_DefaultOpen)) {
                         ImGui::TextDisabled("直接在3D视窗抓取 Gizmo 轴/圆环进行平移或旋转");
                         const glm::vec3 marker_pos_now(ik_state.marker_pos[0], ik_state.marker_pos[1], ik_state.marker_pos[2]);
-                        const glm::quat marker_q_now = glm::normalize(
-                            glm::quat_cast(markerWorldMatrix(glm::vec3(0.0f),
-                                                             glm::vec3(ik_state.marker_rpy_deg[0], ik_state.marker_rpy_deg[1],
-                                                                       ik_state.marker_rpy_deg[2]))));
+                        const glm::quat marker_q_now       = glm::normalize(glm::quat_cast(markerWorldMatrix(
+                            glm::vec3(0.0f),
+                            glm::vec3(ik_state.marker_rpy_deg[0], ik_state.marker_rpy_deg[1], ik_state.marker_rpy_deg[2]))));
                         const std::string marker_pose_text = FormatPoseInputXyzQuat(marker_pos_now, marker_q_now);
                         char marker_pose_display[256]      = {0};
                         std::snprintf(marker_pose_display, sizeof(marker_pose_display), "%s", marker_pose_text.c_str());
@@ -1365,7 +983,7 @@ int main(int argc, char** argv) {
                                     ik_state.marker_rpy_deg[1] = parsed_rpy.y;
                                     ik_state.marker_rpy_deg[2] = parsed_rpy.z;
                                 }
-                                saveActiveMarkerToTarget();
+                                ik_controller.SaveActiveMarkerToTarget();
                                 applyIkForActiveChain(false, false, false);
                                 if (ik_state.lock_orientation) {
                                     ik_state.last_status = "位姿串已应用：姿态锁定，仅更新了位置";
@@ -1384,7 +1002,7 @@ int main(int argc, char** argv) {
                         bool marker_rot_commit = ImGui::IsItemDeactivatedAfterEdit();
                         ImGui::EndDisabled();
                         if (marker_pos_edited || marker_rot_edited) {
-                            saveActiveMarkerToTarget();
+                            ik_controller.SaveActiveMarkerToTarget();
                             if (ik_state.realtime_ik_during_drag) {
                                 const bool position_only_target = marker_pos_edited && !marker_rot_edited;
                                 applyIkForActiveChain(false, true, position_only_target);
@@ -1404,7 +1022,7 @@ int main(int argc, char** argv) {
                                 ik_state.marker_rpy_deg[1]  = glm::degrees(tip_rpy.y);
                                 ik_state.marker_rpy_deg[2]  = glm::degrees(tip_rpy.z);
                                 ik_state.marker_initialized = true;
-                                saveActiveMarkerToTarget();
+                                ik_controller.SaveActiveMarkerToTarget();
                             }
                         }
                         ImGui::SameLine();
@@ -1435,7 +1053,7 @@ int main(int argc, char** argv) {
         }
 
         if (ui_state.sidebar_page == 2) {
-            RenderPlaybackPanel(&playback_state, &trajectory_player, &scene, joints);
+            RenderPlaybackPanel(&playback_state, &trajectory_player, &playback_sm, &scene, joints);
         }
 
         if (ui_state.sidebar_page == 3) {
@@ -1447,6 +1065,9 @@ int main(int argc, char** argv) {
         }
         if (ui_state.sidebar_page == 6) {
             RenderObstaclePanel(&ui_state);
+        }
+        if (ui_state.sidebar_page == 7) {
+            RenderPathPlannerPanel(&path_planner_ui, &playback_state, &scene, &ik_state.solver, ik_state.chains);
         }
 
         if (playback_state.trajectory_io_status != last_playback_io_status) {
@@ -1469,17 +1090,19 @@ int main(int argc, char** argv) {
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwSwapBuffers(window);
+        app.SwapBuffers();
     }
+
+    // Persist trajectory file list to config before exit
+    cfg.playback.trajectory_files.clear();
+    for (const auto& entry : playback_state.trajectory_files) {
+        cfg.playback.trajectory_files.push_back(entry.path);
+    }
+    cfg.playback.selected_index = playback_state.selected_trajectory_index;
 
     DestroyUserObstacleGpuMeshes(&obstacle_meshes);
     glDeleteProgram(mesh_shader);
     glDeleteProgram(line_shader);
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-    glfwDestroyWindow(window);
-    glfwTerminate();
     ros_bridge.shutdown();
     return 0;
 }

@@ -43,8 +43,9 @@ namespace kinematic_viewer {
             }
             return false;
         }
-        launch.urdfPath = launch.config.robot.urdf_path;
-        *out            = launch;
+        launch.configPath = configOrUrdf;
+        launch.urdfPath   = launch.config.robot.urdf_path;
+        *out              = launch;
         return true;
     }
 

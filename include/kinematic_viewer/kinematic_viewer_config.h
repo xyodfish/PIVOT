@@ -32,6 +32,11 @@ namespace kinematic_viewer {
         std::vector<float> right_arm;
     };
 
+    struct KinematicPlaybackConfig {
+        std::vector<std::string> trajectory_files;
+        int selected_index = -1;
+    };
+
     struct KinematicViewerConfig {
         WindowConfig window;
         RobotConfig robot;
@@ -40,6 +45,7 @@ namespace kinematic_viewer {
         ViewerIkConfig ik;
         KinematicRosConfig ros;
         KinematicInitialPoseConfig initial_pose;
+        KinematicPlaybackConfig playback;
 
         static KinematicViewerConfig LoadFromFile(const std::string& yaml_path, bool* loaded_ok = nullptr);
     };

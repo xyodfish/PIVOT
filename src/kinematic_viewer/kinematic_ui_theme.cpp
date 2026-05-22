@@ -1,9 +1,8 @@
 #include "kinematic_viewer/kinematic_ui_theme.h"
+#include "kinematic_viewer/kinematic_string_utils.h"
 
 #include "imgui.h"
 
-#include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -25,11 +24,6 @@ namespace kinematic_viewer {
                 "spectrum_light",
             };
             return kNames;
-        }
-
-        std::string LowerString(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-            return s;
         }
 
         static bool FileExists(const std::string& path) {
@@ -215,7 +209,7 @@ namespace kinematic_viewer {
     }
 
     int KinematicUiThemeIndexFromName(const std::string& themeName) {
-        const std::string target = kinematic_ui_theme_internal::LowerString(themeName);
+        const std::string target = kinematic_viewer::LowerString(themeName);
         const auto& names        = KinematicUiThemeNames();
         for (int i = 0; i < static_cast<int>(names.size()); ++i) {
             if (target == names[static_cast<size_t>(i)]) {

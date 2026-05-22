@@ -1,4 +1,5 @@
 #include "kinematic_viewer/kinematic_user_obstacles.h"
+#include "kinematic_viewer/kinematic_string_utils.h"
 
 #include "kinematic_viewer/kinematic_marker_utils.h"
 
@@ -9,7 +10,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -22,6 +22,10 @@
 namespace kinematic_viewer {
     namespace {
 
+        using kinematic_viewer::FormatPoseInputXyzQuat;
+        using kinematic_viewer::NormalizePath;
+        using kinematic_viewer::ParsePoseInputXyzQuat;
+
         constexpr int kSphereStacks   = 16;
         constexpr int kSphereSectors  = 24;
         constexpr int kCylinderSlices = 28;
@@ -31,69 +35,6 @@ namespace kinematic_viewer {
             glm::vec3 n;
             glm::vec2 uv{0.0f};
         };
-
-        bool ParsePoseInputXyzQuat(const char* text, glm::vec3* out_pos, glm::quat* out_quat, std::string* out_error) {
-            if (text == nullptr || out_pos == nullptr || out_quat == nullptr) {
-                if (out_error != nullptr) {
-                    *out_error = "输入为空";
-                }
-                return false;
-            }
-            float x = 0.0f, y = 0.0f, z = 0.0f;
-            float qx = 0.0f, qy = 0.0f, qz = 0.0f, qw = 1.0f;
-            int consumed      = 0;
-            const int matched = std::sscanf(text, " %f , %f , %f , %f , %f , %f , %f %n", &x, &y, &z, &qx, &qy, &qz, &qw, &consumed);
-            if (matched != 7) {
-                if (out_error != nullptr) {
-                    *out_error = "格式错误，应为 x,y,z,qx,qy,qz,qw";
-                }
-                return false;
-            }
-            if (text[consumed] != '\0') {
-                if (out_error != nullptr) {
-                    *out_error = "格式错误：包含多余字符";
-                }
-                return false;
-            }
-
-            const glm::quat q_in(qw, qx, qy, qz);
-            const float norm = glm::length(q_in);
-            if (norm < 1e-6f) {
-                if (out_error != nullptr) {
-                    *out_error = "四元数范数过小";
-                }
-                return false;
-            }
-            if (std::fabs(norm - 1.0f) > 1e-3f) {
-                if (out_error != nullptr) {
-                    char buf[128];
-                    std::snprintf(buf, sizeof(buf), "四元数未归一化，当前范数=%.6f", norm);
-                    *out_error = buf;
-                }
-                return false;
-            }
-
-            *out_pos  = glm::vec3(x, y, z);
-            *out_quat = glm::normalize(q_in);
-            return true;
-        }
-
-        std::string FormatPoseInputXyzQuat(const glm::vec3& pos, const glm::quat& quat) {
-            const glm::quat q = glm::normalize(quat);
-            char buf[196];
-            std::snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f", pos.x, pos.y, pos.z, q.x, q.y, q.z, q.w);
-            return std::string(buf);
-        }
-
-        std::string NormalizePath(const std::string& path) {
-            std::error_code ec;
-            std::filesystem::path p(path);
-            auto normalized = std::filesystem::weakly_canonical(p, ec);
-            if (!ec) {
-                return normalized.string();
-            }
-            return p.lexically_normal().string();
-        }
 
         bool IsYamlFileExt(const std::filesystem::path& path) {
             std::string ext = path.extension().string();

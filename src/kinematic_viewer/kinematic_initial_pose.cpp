@@ -43,8 +43,21 @@ namespace kinematic_viewer {
         kinematic_initial_pose_internal::ApplyJointGroup(config.right_arm_joint_names, config.right_arm, scene, &result,
                                                          &missingJointNames);
 
+        if (config.apply_chassis) {
+            scene->setVirtualBasePose2D(config.chassis_x, config.chassis_y, config.chassis_yaw);
+            result.chassis_applied  = true;
+            result.chassis_x_m      = config.chassis_x;
+            result.chassis_y_m      = config.chassis_y;
+            result.chassis_yaw_rad  = config.chassis_yaw;
+        }
+        scene->updateTransforms();
+
         std::stringstream ss;
         ss << "已应用关节 " << result.applied_joint_count << "/" << result.requested_joint_count;
+        if (result.chassis_applied) {
+            ss << "，底盘(x=" << config.chassis_x << " m, y=" << config.chassis_y << " m, yaw=" << config.chassis_yaw
+               << " rad)";
+        }
         if (!missingJointNames.empty()) {
             std::sort(missingJointNames.begin(), missingJointNames.end());
             missingJointNames.erase(std::unique(missingJointNames.begin(), missingJointNames.end()), missingJointNames.end());

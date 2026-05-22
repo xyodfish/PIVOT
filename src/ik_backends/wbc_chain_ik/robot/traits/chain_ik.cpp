@@ -16,7 +16,8 @@ namespace Wbc {
             joint_weights = Vector::Constant(nv, 1e-2);
 
             J_com.setZero(3, nv);
-            pinocchio::centerOfMass(model_, data_, Vector::Zero(nv), Vector::Zero(nv), Vector::Zero(nv));
+            const Vector q_neutral = pinocchio::neutral(model_);
+            pinocchio::centerOfMass(model_, data_, q_neutral);
             com_ref = data_.com[0];
             com_weight.setConstant(1.0);
         }
@@ -156,18 +157,24 @@ namespace Wbc {
                     return result;
                 }
 
-                // q_min - q_out < dq < q_max - q_out
+                const double dq_step_limit = (model_.nq == model_.nv) ? 0.02 : 0.05;
                 qp0.CI.setIdentity();
-                qp0.ci_lb.noalias() = q_min - q_out;
-                qp0.ci_ub.noalias() = q_max - q_out;
+                if (model_.nq == model_.nv) {
+                    // q_min - q_out < dq < q_max - q_out
+                    qp0.ci_lb.noalias() = q_min - q_out;
+                    qp0.ci_ub.noalias() = q_max - q_out;
+                } else {
+                    // Floating base: nq != nv; rely on per-step velocity limits in tangent space.
+                    qp0.ci_lb.setConstant(-dq_step_limit);
+                    qp0.ci_ub.setConstant(dq_step_limit);
+                }
                 // Zero velocity for fixed joints
                 for (const auto& idx : fixed_joints) {
                     qp0.ci_lb(idx) = 0.0;
                     qp0.ci_ub(idx) = 0.0;
                 }
 
-                // 2. 加每次迭代 dq 限幅：放在 q_min/q_max 约束之后，solve 之前
-                const double dq_step_limit = 0.02;
+                // Per-iteration dq limit (after joint bounds / fixed joints).
                 for (int i = 0; i < nv; ++i) {
                     qp0.ci_lb(i) = std::max(qp0.ci_lb(i), -dq_step_limit);
                     qp0.ci_ub(i) = std::min(qp0.ci_ub(i), dq_step_limit);
@@ -182,7 +189,9 @@ namespace Wbc {
 
                 for (int i = 0; i < nv; ++i) {
                     qp0.H(i, i) += posture_weight;
-                    qp0.g(i) += posture_weight * (q_out(i) - q_current(i));
+                    if (model_.nq == model_.nv) {
+                        qp0.g(i) += posture_weight * (q_out(i) - q_current(i));
+                    }
                 }
 
                 // Secondary objective: minimize joint motion (delta_q)

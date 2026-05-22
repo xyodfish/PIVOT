@@ -45,6 +45,11 @@ initial_pose:
       "right_arm_joint6",
       "right_arm_joint7",
     ]
+  # Planar chassis pose (m, m, rad); same convention as trajectory CSV chassis_x/y/yaw.
+  apply_chassis: true
+  chassis_x: 0.0
+  chassis_y: 0.3
+  chassis_yaw: 0.0
   head: [0.0, 0.00989756]
   leg: [0.499191, 1.49907, 1.00046, 0.0, -0.000431432]
   left_arm: [1.99995, -1.60004, -0.599905, -1.69994, 0.0, -0.799924, 0.0]

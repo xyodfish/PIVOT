@@ -161,6 +161,16 @@ namespace kinematic_viewer {
             ReadFloatList(root["initial_pose"], "leg", cfg.initial_pose.leg);
             ReadFloatList(root["initial_pose"], "left_arm", cfg.initial_pose.left_arm);
             ReadFloatList(root["initial_pose"], "right_arm", cfg.initial_pose.right_arm);
+            ReadScalar(root["initial_pose"], "apply_chassis", cfg.initial_pose.apply_chassis);
+            ReadScalar(root["initial_pose"], "chassis_x", cfg.initial_pose.chassis_x);
+            ReadScalar(root["initial_pose"], "chassis_y", cfg.initial_pose.chassis_y);
+            ReadScalar(root["initial_pose"], "chassis_yaw", cfg.initial_pose.chassis_yaw);
+            if (root["initial_pose"] && root["initial_pose"]["chassis"] && root["initial_pose"]["chassis"].IsSequence() &&
+                root["initial_pose"]["chassis"].size() >= 3) {
+                cfg.initial_pose.chassis_x   = root["initial_pose"]["chassis"][0].as<float>();
+                cfg.initial_pose.chassis_y   = root["initial_pose"]["chassis"][1].as<float>();
+                cfg.initial_pose.chassis_yaw = root["initial_pose"]["chassis"][2].as<float>();
+            }
 
             ReadStringListFromItem(root["playback"], "trajectory_files", cfg.playback.trajectory_files);
             ReadScalar(root["playback"], "selected_index", cfg.playback.selected_index);

@@ -115,10 +115,8 @@ namespace omnilink::teleop_viewer {
         std::unordered_map<std::string, int> fullBodyWbcJointQIndex_;
         std::vector<int> fullBodyWbcLockedVIndex_;
         std::vector<int> fullBodyWbcPlanarBaseVIndex_;
-        int fullBodyWbcBaseXQIndex_    = -1;
-        int fullBodyWbcBaseYQIndex_    = -1;
-        int fullBodyWbcBaseYawQIndex_  = -1;
-        bool fullBodyWbcHasPlanarBase_ = false;
+        int fullBodyWbcNv_               = 0;
+        bool fullBodyWbcHasFloatingBase_ = false;
     };
 
 }  // namespace omnilink::teleop_viewer

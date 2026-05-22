@@ -606,10 +606,7 @@ int main(int argc, char** argv) {
 
             // Realtime IK updates while dragging (RViz-like immediate feedback), throttled by frequency.
             if (gizmo_using && ik_state.gizmo_pose_dirty && ik_state.realtime_ik_during_drag) {
-                float effective_hz = std::max(1.0f, ik_state.realtime_ik_hz);
-                if (ik_state.solve_mode == "full_body") {
-                    effective_hz = std::min(effective_hz, current_drag_position_only ? 12.0f : 4.0f);
-                }
+                const float effective_hz  = std::max(5.0f, ik_state.realtime_ik_hz);
                 const double interval_sec = 1.0 / static_cast<double>(effective_hz);
                 if (ik_state.last_realtime_ik_apply_sec < 0.0 || (now_sec - ik_state.last_realtime_ik_apply_sec) >= interval_sec) {
                     applyIkForActiveChain(false, true, current_drag_position_only);
@@ -622,7 +619,7 @@ int main(int argc, char** argv) {
             if (!gizmo_using && ik_state.gizmo_was_using && ik_state.gizmo_drag_interacted) {
                 applyIkForActiveChain(false, false, ik_state.gizmo_drag_position_only);
                 const bool drag_had_rotation               = !ik_state.gizmo_drag_position_only;
-                const bool should_refine_with_single_chain = ik_state.solve_mode == "full_body" &&
+                const bool should_refine_with_single_chain = ik_state.solve_mode == "full_body" && ui_state.lock_base &&
                                                              ik_state.refine_single_chain_on_drag_end &&
                                                              (!ik_state.refine_only_when_rotation || drag_had_rotation);
                 if (should_refine_with_single_chain) {

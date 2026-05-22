@@ -65,7 +65,11 @@ namespace Wbc {
             void setMaxIters(int iters) { max_iters = iters; }
             void setTolerance(double tolerance) { tol = tolerance; }
             void setJointWeights(double weight) { joint_weights = weight * Vector::Ones(nv); }
-            void setJointWeights(const Vector& weights) { joint_weights = weights; }
+            void setJointWeights(const Vector& weights) {
+                if (weights.size() == nv) {
+                    joint_weights = weights;
+                }
+            }
 
             IkResult solveIK(const Vector& q_current, bool verbose = false);
 

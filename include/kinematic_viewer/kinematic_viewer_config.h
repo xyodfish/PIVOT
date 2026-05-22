@@ -30,6 +30,12 @@ namespace kinematic_viewer {
         std::vector<float> leg;
         std::vector<float> left_arm;
         std::vector<float> right_arm;
+
+        // Planar mobile base (m, m, rad); applied via RobotScene virtual base when enable_apply_chassis is true.
+        bool apply_chassis = true;
+        float chassis_x    = 0.0f;
+        float chassis_y    = 0.0f;
+        float chassis_yaw  = 0.0f;
     };
 
     struct KinematicPlaybackConfig {

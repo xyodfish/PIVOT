@@ -219,7 +219,7 @@ namespace kinematic_viewer {
     }  // namespace kinematic_playback_internal
 
     void LinearTrajectoryInterpolator::SampleAndApply(const DebugPlaybackState& playbackState, float sampleTimeSec,
-                                                      int* currentSegmentIndex, omnilink::teleop_viewer::RobotScene* scene) const {
+                                                      int* currentSegmentIndex, teleop_viewer::RobotScene* scene) const {
         auto lerpAngleRad = [](float a0, float a1, float alpha) {
             const float delta = std::atan2(std::sin(a1 - a0), std::cos(a1 - a0));
             return a0 + delta * alpha;
@@ -290,8 +290,8 @@ namespace kinematic_viewer {
     }
 
     void TrajectoryPlayer::RecordKeyframe(DebugPlaybackState* playbackState,
-                                          const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints,
-                                          const omnilink::teleop_viewer::RobotScene& scene) const {
+                                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                          const teleop_viewer::RobotScene& scene) const {
         if (playbackState == nullptr) {
             return;
         }
@@ -371,7 +371,7 @@ namespace kinematic_viewer {
         playbackState->play_time = 0.0f;
     }
 
-    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, omnilink::teleop_viewer::RobotScene* scene,
+    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene,
                                            double dtSec) const {
         if (playbackState == nullptr || scene == nullptr || !interpolator_) {
             return;
@@ -399,7 +399,7 @@ namespace kinematic_viewer {
         interpolator_->SampleAndApply(*playbackState, playbackState->play_time, &playbackState->current_segment_index, scene);
     }
 
-    void TrajectoryPlayer::SampleAtCurrentTime(const DebugPlaybackState& playbackState, omnilink::teleop_viewer::RobotScene* scene) const {
+    void TrajectoryPlayer::SampleAtCurrentTime(const DebugPlaybackState& playbackState, teleop_viewer::RobotScene* scene) const {
         if (scene == nullptr || !interpolator_ || playbackState.keyframes.empty()) {
             return;
         }
@@ -654,8 +654,8 @@ namespace kinematic_viewer {
     }
 
     void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState,
-                                            const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints,
-                                            const omnilink::teleop_viewer::RobotScene& scene) {
+                                            const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                            const teleop_viewer::RobotScene& scene) {
         if (playbackState == nullptr) {
             return;
         }
@@ -665,7 +665,7 @@ namespace kinematic_viewer {
         playbackState->selected_keyframe_index = -1;
         playbackState->current_segment_index   = -1;
 
-        std::vector<omnilink::teleop_viewer::RobotScene::JointInfo> revoluteJoints;
+        std::vector<teleop_viewer::RobotScene::JointInfo> revoluteJoints;
         revoluteJoints.reserve(joints.size());
         for (const auto& joint : joints) {
             if (joint.revolute) {

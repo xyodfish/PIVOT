@@ -4,7 +4,7 @@
 
 namespace kinematic_viewer {
 
-    bool EnsureMarkerTargetInitialized(IkState* ikState, omnilink::teleop_viewer::RobotScene* scene, int chainIndex) {
+    bool EnsureMarkerTargetInitialized(IkState* ikState, teleop_viewer::RobotScene* scene, int chainIndex) {
         if (ikState == nullptr || scene == nullptr) {
             return false;
         }
@@ -26,7 +26,7 @@ namespace kinematic_viewer {
         return true;
     }
 
-    bool LoadActiveMarkerFromTarget(IkState* ikState, omnilink::teleop_viewer::RobotScene* scene) {
+    bool LoadActiveMarkerFromTarget(IkState* ikState, teleop_viewer::RobotScene* scene) {
         if (ikState == nullptr || scene == nullptr) {
             return false;
         }

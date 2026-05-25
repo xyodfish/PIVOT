@@ -44,7 +44,27 @@ namespace kinematic_viewer {
 
     void KinematicRenderLoop::DrawSceneMeshes(GLuint shader, const Context& ctx, const glm::mat4& proj, const glm::mat4& view) {
         SetupMeshShaderUniforms(shader, proj, view, ctx.camera->eye());
-        ctx.scene->draw(shader);
+
+        teleop_viewer::RobotScene::SceneDrawStyle style;
+        if (ctx.ui_state != nullptr) {
+            style.show_visual_meshes    = ctx.ui_state->show_visual_meshes;
+            style.show_collision_bodies = ctx.ui_state->show_collision_bodies;
+            style.wireframe_visuals     = ctx.ui_state->show_wireframe;
+            style.hovered_link          = ctx.ui_state->hovered_link;
+            style.selected_link         = ctx.ui_state->selected_link;
+        }
+
+        if (style.show_collision_bodies) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_TRUE);
+        }
+
+        ctx.scene->draw(shader, style);
+
+        if (style.show_collision_bodies) {
+            glDisable(GL_BLEND);
+        }
     }
 
     void KinematicRenderLoop::DrawObstacles(GLuint shader, const Context& ctx, const glm::mat4& view, const glm::mat4& proj) {
@@ -58,6 +78,20 @@ namespace kinematic_viewer {
         BuildMarkerAxes(ctx, out);
         BuildCollisionLine(ctx, out);
         BuildPlannedPathLines(ctx, out);
+        BuildSelectedLinkHighlight(ctx, out);
+        if (ctx.ui_state->show_com && ctx.scene != nullptr) {
+            const glm::vec3 com_color(0.95f, 0.35f, 0.15f);
+            const float com_size = 0.018f;
+            for (const auto& com : ctx.scene->getLinkComWorldPositions()) {
+                const glm::vec3& p = com.world_position;
+                out->push_back({p + glm::vec3(-com_size, 0.0f, 0.0f), com_color});
+                out->push_back({p + glm::vec3(com_size, 0.0f, 0.0f), com_color});
+                out->push_back({p + glm::vec3(0.0f, -com_size, 0.0f), com_color});
+                out->push_back({p + glm::vec3(0.0f, com_size, 0.0f), com_color});
+                out->push_back({p + glm::vec3(0.0f, 0.0f, -com_size), com_color});
+                out->push_back({p + glm::vec3(0.0f, 0.0f, com_size), com_color});
+            }
+        }
 
         // Selected obstacle highlight axes and pick circles
         if (ctx.ui_state->user_obstacles.selected_index >= 0 &&
@@ -164,6 +198,35 @@ namespace kinematic_viewer {
             out->push_back({p + glm::vec3(0.0f, waypoint_size, 0.0f), waypoint_color});
             out->push_back({p + glm::vec3(0.0f, 0.0f, -waypoint_size), waypoint_color});
             out->push_back({p + glm::vec3(0.0f, 0.0f, waypoint_size), waypoint_color});
+        }
+    }
+
+    void KinematicRenderLoop::BuildSelectedLinkHighlight(const Context& ctx, std::vector<KinematicLineVertex>* out) {
+        if (ctx.ui_state == nullptr || ctx.scene == nullptr) {
+            return;
+        }
+
+        auto drawLinkRing = [&](const std::string& link_name, const glm::vec3& color) {
+            if (link_name.empty()) {
+                return;
+            }
+            for (const auto& proxy : ctx.scene->getLinkCollisionProxies()) {
+                if (proxy.link_name != link_name) {
+                    continue;
+                }
+                const float pick_r = std::max(proxy.radius_m * 1.08f, 0.025f);
+                appendCircle(out, proxy.world_center, glm::vec3(1.0f, 0.0f, 0.0f), pick_r, color, 36);
+                appendCircle(out, proxy.world_center, glm::vec3(0.0f, 1.0f, 0.0f), pick_r, color, 36);
+                appendCircle(out, proxy.world_center, glm::vec3(0.0f, 0.0f, 1.0f), pick_r, color, 36);
+                break;
+            }
+        };
+
+        if (!ctx.ui_state->hovered_link.empty() && ctx.ui_state->hovered_link != ctx.ui_state->selected_link) {
+            drawLinkRing(ctx.ui_state->hovered_link, glm::vec3(1.0f, 0.78f, 0.22f));
+        }
+        if (!ctx.ui_state->selected_link.empty()) {
+            drawLinkRing(ctx.ui_state->selected_link, glm::vec3(0.25f, 0.92f, 1.0f));
         }
     }
 

@@ -18,7 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
 
     struct IkChainStatus {
         ViewerIkChainConfig config;
@@ -119,4 +119,4 @@ namespace omnilink::teleop_viewer {
         bool fullBodyWbcHasFloatingBase_ = false;
     };
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

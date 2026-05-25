@@ -27,16 +27,16 @@ namespace kinematic_viewer {
     class CollisionPairFilterStrategy {
        public:
         virtual ~CollisionPairFilterStrategy()                                                              = default;
-        virtual bool ShouldEvaluate(const CollisionMonitorState& state, const omnilink::teleop_viewer::RobotScene& scene,
-                                    const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& a,
-                                    const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& b) const = 0;
+        virtual bool ShouldEvaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene,
+                                    const teleop_viewer::RobotScene::LinkCollisionProxy& a,
+                                    const teleop_viewer::RobotScene::LinkCollisionProxy& b) const = 0;
     };
 
     class DefaultCollisionPairFilterStrategy : public CollisionPairFilterStrategy {
        public:
-        bool ShouldEvaluate(const CollisionMonitorState& state, const omnilink::teleop_viewer::RobotScene& scene,
-                            const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& a,
-                            const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& b) const override;
+        bool ShouldEvaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene,
+                            const teleop_viewer::RobotScene::LinkCollisionProxy& a,
+                            const teleop_viewer::RobotScene::LinkCollisionProxy& b) const override;
     };
 
     class CollisionMonitor {
@@ -44,7 +44,7 @@ namespace kinematic_viewer {
         CollisionMonitor();
 
         void SetPairFilterStrategy(std::unique_ptr<CollisionPairFilterStrategy> strategy);
-        CollisionMonitorResult Evaluate(const CollisionMonitorState& state, const omnilink::teleop_viewer::RobotScene& scene) const;
+        CollisionMonitorResult Evaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene) const;
         void UpdateStateFromResult(const CollisionMonitorResult& result, CollisionMonitorState* state) const;
 
        private:

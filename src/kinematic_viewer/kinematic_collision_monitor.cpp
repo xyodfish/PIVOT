@@ -5,8 +5,8 @@
 namespace kinematic_viewer {
     namespace kinematic_collision_monitor_internal {
 
-        CollisionPairDistance BuildDistance(const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& a,
-                                            const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& b) {
+        CollisionPairDistance BuildDistance(const teleop_viewer::RobotScene::LinkCollisionProxy& a,
+                                            const teleop_viewer::RobotScene::LinkCollisionProxy& b) {
             CollisionPairDistance result;
             result.link_a = a.link_name;
             result.link_b = b.link_name;
@@ -29,9 +29,9 @@ namespace kinematic_viewer {
     }  // namespace kinematic_collision_monitor_internal
 
     bool DefaultCollisionPairFilterStrategy::ShouldEvaluate(const CollisionMonitorState& state,
-                                                            const omnilink::teleop_viewer::RobotScene& scene,
-                                                            const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& a,
-                                                            const omnilink::teleop_viewer::RobotScene::LinkCollisionProxy& b) const {
+                                                            const teleop_viewer::RobotScene& scene,
+                                                            const teleop_viewer::RobotScene::LinkCollisionProxy& a,
+                                                            const teleop_viewer::RobotScene::LinkCollisionProxy& b) const {
         if (state.ignore_same_link && a.link_name == b.link_name) {
             return false;
         }
@@ -59,7 +59,7 @@ namespace kinematic_viewer {
     }
 
     CollisionMonitorResult CollisionMonitor::Evaluate(const CollisionMonitorState& state,
-                                                      const omnilink::teleop_viewer::RobotScene& scene) const {
+                                                      const teleop_viewer::RobotScene& scene) const {
         CollisionMonitorResult result;
         if (!state.enable || !pair_filter_strategy_) {
             return result;

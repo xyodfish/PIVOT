@@ -1,4 +1,6 @@
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
+
+#include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
 
@@ -29,7 +31,7 @@ namespace kinematic_viewer {
         }
 
         bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
-                                          const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints,
+                                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
                                           std::string* errorMessage) {
             std::unordered_set<std::string> sceneJointNames;
             for (const auto& joint : joints) {
@@ -168,7 +170,7 @@ namespace kinematic_viewer {
         }
 
         bool ApplyJointGroupTextCommand(const std::string& commandLine, const ViewerState& uiState,
-                                        omnilink::teleop_viewer::RobotScene* scene, std::string* errorMessage) {
+                                        teleop_viewer::RobotScene* scene, std::string* errorMessage) {
             if (scene == nullptr) {
                 if (errorMessage != nullptr) {
                     *errorMessage = "内部错误：scene为空";
@@ -242,7 +244,7 @@ namespace kinematic_viewer {
         }
 
         bool ApplyJointGroupValues(const ViewerState::JointInputGroup& group, const std::vector<float>& values,
-                                   omnilink::teleop_viewer::RobotScene* scene, std::string* errorMessage) {
+                                   teleop_viewer::RobotScene* scene, std::string* errorMessage) {
             if (scene == nullptr) {
                 if (errorMessage != nullptr) {
                     *errorMessage = "内部错误：scene为空";
@@ -479,16 +481,24 @@ namespace kinematic_viewer {
         if (uiState == nullptr) {
             return;
         }
-        ImGui::Checkbox("显示关节轴", &uiState->show_axes);
-        ImGui::Checkbox("仅旋转关节轴", &uiState->show_revolute_only);
-        ImGui::Checkbox("显示非旋转关节", &uiState->show_non_revolute);
-        ImGui::Checkbox("显示世界坐标轴", &uiState->show_world_axes);
-        ImGui::Checkbox("固定底座模式", &uiState->lock_base);
-        ImGui::SliderFloat("关节轴长度", &uiState->axis_length, 0.03f, 0.5f, "%.3f");
-        ImGui::SliderFloat("线宽", &uiState->axis_line_width, 1.0f, 6.0f, "%.1f");
-        ImGui::SliderFloat("世界轴长度", &uiState->world_axis_length, 0.1f, 1.5f, "%.2f");
-        ImGui::SliderFloat("地面网格尺寸", &uiState->grid_size, 1.0f, 20.0f, "%.1f");
-        ImGui::SliderInt("地面网格密度", &uiState->grid_count, 10, 120);
+        if (!ImGui::CollapsingHeader("场景显示", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+        SidebarCheckboxRow4("网格", &uiState->show_visual_meshes, "线框", &uiState->show_wireframe, "碰撞体",
+                              &uiState->show_collision_bodies, "质心", &uiState->show_com);
+        SidebarCheckboxRow4("关节轴", &uiState->show_axes, "仅旋转轴", &uiState->show_revolute_only, "非旋转轴",
+                              &uiState->show_non_revolute, "世界轴", &uiState->show_world_axes);
+        ImGui::Checkbox("固定底座", &uiState->lock_base);
+        if (ImGui::TreeNode("轴与网格")) {
+            SidebarSliderFloat("轴长", &uiState->axis_length, 0.03f, 0.5f, "%.3f");
+            SidebarSliderFloat("线宽", &uiState->axis_line_width, 1.0f, 6.0f, "%.1f");
+            SidebarSliderFloat("世界轴长", &uiState->world_axis_length, 0.1f, 1.5f, "%.2f");
+            SidebarSliderFloat("网格尺寸", &uiState->grid_size, 1.0f, 20.0f, "%.1f");
+            PushSidebarFullWidth();
+            ImGui::SliderInt("网格密度", &uiState->grid_count, 10, 120);
+            PopSidebarWidth();
+            ImGui::TreePop();
+        }
     }
 
     void RenderObstaclePanel(ViewerState* uiState) {
@@ -499,9 +509,12 @@ namespace kinematic_viewer {
         RenderUserObstaclePanel(&uiState->user_obstacles);
     }
 
-    void RenderJointPanel(ViewerState* uiState, omnilink::teleop_viewer::RobotScene* scene,
-                          const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints) {
+    void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
+                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints) {
         if (uiState == nullptr || scene == nullptr) {
+            return;
+        }
+        if (!ImGui::CollapsingHeader("关节调试", ImGuiTreeNodeFlags_DefaultOpen)) {
             return;
         }
 
@@ -527,22 +540,20 @@ namespace kinematic_viewer {
             }
         }
 
-        ImGui::InputText("关节过滤", uiState->joint_filter, sizeof(uiState->joint_filter));
+        SidebarInputText("过滤", uiState->joint_filter, sizeof(uiState->joint_filter));
         std::string filter = uiState->joint_filter;
         std::transform(filter.begin(), filter.end(), filter.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-        ImGui::Text("关节总数: %d  旋转关节: %d  越界关节: %d", static_cast<int>(joints.size()), revoluteCount, clampedCount);
+        ImGui::Text("共 %d | 旋转 %d | 越界 %d", static_cast<int>(joints.size()), revoluteCount, clampedCount);
         if (!minName.empty()) {
             ImVec4 c = (minMarginDeg < 3.0f) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f)
                                              : ((minMarginDeg < 8.0f) ? ImVec4(1.0f, 0.75f, 0.25f, 1.0f) : ImVec4(0.6f, 0.9f, 0.6f, 1.0f));
             ImGui::TextColored(c, "最小限位裕量: %.2f deg (%s)", minMarginDeg, minName.c_str());
         }
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("分组批量输入(rad)");
         if (uiState->joint_input_groups.empty()) {
-            ImGui::TextDisabled("当前未配置可批量输入的group（请在 config.initial_pose.*_joint_names 配置）。");
-        } else {
+            ImGui::TextDisabled("未配置关节分组（见 config.initial_pose）");
+        } else if (ImGui::CollapsingHeader("分组批量输入")) {
             if (uiState->selected_joint_input_group < 0 ||
                 uiState->selected_joint_input_group >= static_cast<int>(uiState->joint_input_groups.size())) {
                 uiState->selected_joint_input_group = 0;
@@ -552,14 +563,12 @@ namespace kinematic_viewer {
             for (const auto& group : uiState->joint_input_groups) {
                 groupNames.push_back(group.name.c_str());
             }
-            ImGui::Combo("Group下拉", &uiState->selected_joint_input_group, groupNames.data(), static_cast<int>(groupNames.size()));
+            SidebarCombo("分组", &uiState->selected_joint_input_group, groupNames.data(), static_cast<int>(groupNames.size()));
 
             const auto& selectedGroup = uiState->joint_input_groups[static_cast<size_t>(uiState->selected_joint_input_group)];
-            ImGui::Text("当前Group: %s (关节数: %d)", selectedGroup.name.c_str(), static_cast<int>(selectedGroup.joint_names.size()));
-            ImGui::TextDisabled("当前Group输入格式: -0.90,1.24,...（只填角度，不需要group名）");
-            ImGui::InputTextMultiline("当前Group角度(rad)", uiState->joint_group_values_input, sizeof(uiState->joint_group_values_input),
-                                      ImVec2(-FLT_MIN, 72.0f));
-            if (ImGui::Button("应用当前Group输入")) {
+            ImGui::Text("%s (%d 关节)", selectedGroup.name.c_str(), static_cast<int>(selectedGroup.joint_names.size()));
+            SidebarInputTextMultiline("角度(rad)", uiState->joint_group_values_input, sizeof(uiState->joint_group_values_input), 52.0f);
+            if (ImGui::SmallButton("应用分组")) {
                 std::vector<float> values;
                 std::string error;
                 if (!kinematic_sidebar_panels_internal::ParseJointValuesRad(uiState->joint_group_values_input, &values, &error)) {
@@ -574,21 +583,9 @@ namespace kinematic_viewer {
                 }
             }
 
-            ImGui::Separator();
-            std::stringstream groupDesc;
-            groupDesc << "可用group: ";
-            for (size_t i = 0; i < uiState->joint_input_groups.size(); ++i) {
-                if (i > 0) {
-                    groupDesc << " | ";
-                }
-                groupDesc << uiState->joint_input_groups[i].name << "(" << uiState->joint_input_groups[i].joint_names.size() << ")";
-            }
-            ImGui::TextWrapped("%s", groupDesc.str().c_str());
-            ImGui::TextDisabled("示例: right_arm -0.903373,1.24978,1.93879,2.29756,-1.84481,0.135545,-1.0195");
-            ImGui::TextDisabled("支持多条: 每行一条，或使用 ';' 分隔。");
-            ImGui::InputTextMultiline("##joint_group_input", uiState->joint_group_input, sizeof(uiState->joint_group_input),
-                                      ImVec2(-FLT_MIN, 84.0f));
-            if (ImGui::Button("应用分组关节输入")) {
+            if (ImGui::TreeNode("多组命令")) {
+                SidebarInputTextMultiline("命令", uiState->joint_group_input, sizeof(uiState->joint_group_input), 56.0f);
+                if (ImGui::SmallButton("应用全部")) {
                 const std::string rawText               = uiState->joint_group_input;
                 const std::vector<std::string> commands = kinematic_sidebar_panels_internal::SplitJointGroupCommands(rawText);
                 if (commands.empty()) {
@@ -618,6 +615,8 @@ namespace kinematic_viewer {
                     }
                     uiState->joint_group_input_status = status.str();
                 }
+                }
+                ImGui::TreePop();
             }
             if (!uiState->joint_group_input_status.empty()) {
                 const ImVec4 statusColor =
@@ -626,7 +625,7 @@ namespace kinematic_viewer {
             }
         }
 
-        if (ImGui::Button("旋转关节全部归零")) {
+        if (ImGui::Button("归零")) {
             for (const auto& j : joints) {
                 if (j.revolute) {
                     scene->setJointPositionByName(j.name, 0.0f);
@@ -634,7 +633,7 @@ namespace kinematic_viewer {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("一键夹紧到限位内")) {
+        if (ImGui::Button("夹紧限位")) {
             for (const auto& j : joints) {
                 if (!j.revolute) {
                     continue;
@@ -644,29 +643,34 @@ namespace kinematic_viewer {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("保存当前姿态")) {
+        if (ImGui::SmallButton("存姿态")) {
             uiState->pose_snapshot.clear();
             for (const auto& j : joints) {
                 uiState->pose_snapshot[j.name] = j.position;
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("恢复保存姿态") && !uiState->pose_snapshot.empty()) {
+        if (ImGui::SmallButton("恢复姿态") && !uiState->pose_snapshot.empty()) {
             for (const auto& [name, value] : uiState->pose_snapshot) {
                 scene->setJointPositionByName(name, value);
             }
         }
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("关节调试");
-        if (ImGui::BeginTable("joint_table", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
-                              ImVec2(0.0f, ImGui::GetContentRegionAvail().y))) {
-            ImGui::TableSetupColumn("关节");
-            ImGui::TableSetupColumn("滑条(deg)");
-            ImGui::TableSetupColumn("滑条(rad)");
-            ImGui::TableSetupColumn("限位");
-            ImGui::TableSetupColumn("输入(deg)");
-            ImGui::TableSetupColumn("输入(rad)");
+        if (!ImGui::CollapsingHeader("关节表", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+        std::string parent_joint_for_selected_link;
+        if (!uiState->selected_link.empty()) {
+            scene->getParentJointNameForLink(uiState->selected_link, &parent_joint_for_selected_link);
+        }
+        if (ImGui::BeginTable("joint_table", 4,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_SizingFixedFit,
+                              SidebarListSize(uiState->joint_section_height))) {
+            ImGui::TableSetupColumn("关节", ImGuiTableColumnFlags_WidthFixed, 0.0f, 96.0f);
+            ImGui::TableSetupColumn("deg", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("值", ImGuiTableColumnFlags_WidthFixed, 0.0f, 52.0f);
+            ImGui::TableSetupColumn("限位", ImGuiTableColumnFlags_WidthFixed, 0.0f, 58.0f);
             ImGui::TableHeadersRow();
 
             for (const auto& j : joints) {
@@ -682,60 +686,46 @@ namespace kinematic_viewer {
 
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(j.name.c_str());
+                const bool joint_row_selected = (!parent_joint_for_selected_link.empty() && j.name == parent_joint_for_selected_link);
+                if (ImGui::Selectable(j.name.c_str(), joint_row_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                    teleop_viewer::RobotScene::JointDetailInfo detail;
+                    if (scene->getJointDetail(j.name, &detail)) {
+                        uiState->selected_link            = detail.child_link;
+                        uiState->trajectory_min_surface_m = -1.0f;
+                    }
+                }
                 ImGui::TableSetColumnIndex(1);
                 float radValue = j.position;
                 if (j.revolute) {
-                    ImGui::PushItemWidth(-1);
-                    std::string sliderDegId = "##slider_deg_" + j.name;
-                    if (ImGui::SliderAngle(sliderDegId.c_str(), &radValue, glm::degrees(j.min_angle), glm::degrees(j.max_angle))) {
+                    PushSidebarFullWidth();
+                    const std::string slider_deg_id = "##slider_deg_" + j.name;
+                    if (ImGui::SliderAngle(slider_deg_id.c_str(), &radValue, glm::degrees(j.min_angle), glm::degrees(j.max_angle))) {
                         scene->setJointPositionByName(j.name, radValue);
                     }
-                    ImGui::PopItemWidth();
+                    PopSidebarWidth();
                 } else {
-                    ImGui::TextDisabled("不适用");
+                    ImGui::TextDisabled("-");
                 }
 
                 ImGui::TableSetColumnIndex(2);
                 if (j.revolute) {
-                    ImGui::PushItemWidth(-1);
-                    std::string sliderRadId = "##slider_rad_" + j.name;
-                    if (ImGui::SliderFloat(sliderRadId.c_str(), &radValue, j.min_angle, j.max_angle, "%.4f")) {
-                        scene->setJointPositionByName(j.name, radValue);
+                    float input_deg         = glm::degrees(j.position);
+                    const std::string input_deg_id = "##input_deg_" + j.name;
+                    if (ImGui::InputFloat(input_deg_id.c_str(), &input_deg, 0.0f, 0.0f, "%.1f")) {
+                        scene->setJointPositionByName(j.name, glm::radians(input_deg));
                     }
-                    ImGui::PopItemWidth();
                 } else {
-                    ImGui::TextDisabled("不适用");
+                    float input_m = j.position;
+                    if (ImGui::InputFloat(("##m_" + j.name).c_str(), &input_m, 0.0f, 0.0f, "%.3f")) {
+                        scene->setJointPositionByName(j.name, input_m);
+                    }
                 }
 
                 ImGui::TableSetColumnIndex(3);
                 if (j.revolute) {
-                    ImGui::Text("deg: %.2f ~ %.2f", glm::degrees(j.min_angle), glm::degrees(j.max_angle));
-                    ImGui::Text("rad: %.4f ~ %.4f", j.min_angle, j.max_angle);
+                    ImGui::Text("%.0f~%.0f", glm::degrees(j.min_angle), glm::degrees(j.max_angle));
                 } else {
-                    ImGui::TextDisabled("不适用");
-                }
-
-                ImGui::TableSetColumnIndex(4);
-                if (j.revolute) {
-                    float inputDeg         = glm::degrees(j.position);
-                    std::string inputDegId = "##input_deg_" + j.name;
-                    if (ImGui::InputFloat(inputDegId.c_str(), &inputDeg, 0.1f, 1.0f, "%.2f")) {
-                        scene->setJointPositionByName(j.name, glm::radians(inputDeg));
-                    }
-                } else {
-                    ImGui::TextDisabled("不适用");
-                }
-
-                ImGui::TableSetColumnIndex(5);
-                if (j.revolute) {
-                    float inputRad         = j.position;
-                    std::string inputRadId = "##input_rad_" + j.name;
-                    if (ImGui::InputFloat(inputRadId.c_str(), &inputRad, 0.01f, 0.1f, "%.4f")) {
-                        scene->setJointPositionByName(j.name, inputRad);
-                    }
-                } else {
-                    ImGui::TextDisabled("不适用");
+                    ImGui::TextDisabled("-");
                 }
             }
             ImGui::EndTable();
@@ -743,8 +733,8 @@ namespace kinematic_viewer {
     }
 
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             omnilink::teleop_viewer::RobotScene* scene,
-                             const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints) {
+                             teleop_viewer::RobotScene* scene,
+                             const std::vector<teleop_viewer::RobotScene::JointInfo>& joints) {
         if (playbackState == nullptr || playbackPlayer == nullptr || playback_sm == nullptr || scene == nullptr) {
             return;
         }
@@ -809,7 +799,7 @@ namespace kinematic_viewer {
         };
 
         if (ImGui::CollapsingHeader("文件", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::DragFloat("关键帧间隔(s)", &playbackState->keyframe_interval_sec, 0.02f, 0.02f, 5.0f, "%.2f");
+            SidebarDragFloat("关键帧间隔", &playbackState->keyframe_interval_sec, 0.02f, 0.02f, 5.0f, "%.2f");
 
             // Trajectory file list
             if (!playbackState->trajectory_files.empty()) {
@@ -1000,19 +990,13 @@ namespace kinematic_viewer {
         if (collisionState == nullptr) {
             return;
         }
-        ImGui::Separator();
-        ImGui::TextUnformatted("碰撞预警与距离监控");
-        ImGui::Checkbox("启用碰撞监控", &collisionState->enable);
-        ImGui::SameLine();
-        ImGui::Checkbox("显示最近对连线", &collisionState->show_closest_pair_line);
-        ImGui::Checkbox("忽略同一Link", &collisionState->ignore_same_link);
-        ImGui::SameLine();
-        ImGui::Checkbox("忽略父子Link", &collisionState->ignore_parent_child);
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::DragFloat("Danger阈值(m)", &collisionState->danger_distance_m, 0.002f, -0.20f, 0.30f, "%.3f");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::DragFloat("Warning阈值(m)", &collisionState->warning_distance_m, 0.002f, -0.20f, 0.50f, "%.3f");
+        if (!ImGui::CollapsingHeader("碰撞监控", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+        SidebarCheckboxRow2("启用", &collisionState->enable, "最近对连线", &collisionState->show_closest_pair_line);
+        SidebarCheckboxRow2("忽略同Link", &collisionState->ignore_same_link, "忽略父子", &collisionState->ignore_parent_child);
+        SidebarDragFloat("Danger (m)", &collisionState->danger_distance_m, 0.002f, -0.20f, 0.30f, "%.3f");
+        SidebarDragFloat("Warning (m)", &collisionState->warning_distance_m, 0.002f, -0.20f, 0.50f, "%.3f");
         if (collisionState->warning_distance_m < collisionState->danger_distance_m) {
             collisionState->warning_distance_m = collisionState->danger_distance_m;
         }
@@ -1051,23 +1035,25 @@ namespace kinematic_viewer {
         ImGui::Text("中心距离: %.3f m", collisionState->nearest_center_distance_m);
     }
 
-    void RenderTfPanel(ViewerState* uiState, const std::vector<omnilink::teleop_viewer::RobotScene::LinkTfInfo>& tfs) {
+    void RenderTfPanel(ViewerState* uiState, const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs) {
         if (uiState == nullptr) {
             return;
         }
-        ImGui::Separator();
-        ImGui::TextUnformatted("TF 视图");
-        ImGui::InputText("TF过滤", uiState->tf_filter, sizeof(uiState->tf_filter));
+        if (!ImGui::CollapsingHeader("TF 列表", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+        SidebarInputText("过滤", uiState->tf_filter, sizeof(uiState->tf_filter));
         std::string tfFilter = uiState->tf_filter;
         std::transform(tfFilter.begin(), tfFilter.end(), tfFilter.begin(),
                        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-        if (ImGui::BeginTable("tf_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
-                              ImVec2(0.0f, ImGui::GetContentRegionAvail().y))) {
-            ImGui::TableSetupColumn("Link");
-            ImGui::TableSetupColumn("父Link");
-            ImGui::TableSetupColumn("位置 xyz(m)");
-            ImGui::TableSetupColumn("姿态 rpy(deg)");
+        if (ImGui::BeginTable("tf_table", 3,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_SizingFixedFit,
+                              SidebarListSize(uiState->joint_section_height))) {
+            ImGui::TableSetupColumn("Link", ImGuiTableColumnFlags_WidthFixed, 0.0f, 88.0f);
+            ImGui::TableSetupColumn("父", ImGuiTableColumnFlags_WidthFixed, 0.0f, 72.0f);
+            ImGui::TableSetupColumn("位姿", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
             for (const auto& tf : tfs) {
                 std::string key      = tf.name + " " + tf.parent_name;
@@ -1079,13 +1065,17 @@ namespace kinematic_viewer {
                 }
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(tf.name.c_str());
+                const bool link_selected = (uiState->selected_link == tf.name);
+                if (ImGui::Selectable(tf.name.c_str(), link_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                    uiState->selected_link            = tf.name;
+                    uiState->selected_joint           = -1;
+                    uiState->trajectory_min_surface_m = -1.0f;
+                }
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextUnformatted(tf.parent_name.empty() ? "-" : tf.parent_name.c_str());
                 ImGui::TableSetColumnIndex(2);
-                ImGui::Text("%.3f, %.3f, %.3f", tf.world_position.x, tf.world_position.y, tf.world_position.z);
-                ImGui::TableSetColumnIndex(3);
-                ImGui::Text("%.1f, %.1f, %.1f", glm::degrees(tf.world_rpy.x), glm::degrees(tf.world_rpy.y), glm::degrees(tf.world_rpy.z));
+                ImGui::Text("%.2f,%.2f,%.2f | %.0f,%.0f,%.0f", tf.world_position.x, tf.world_position.y, tf.world_position.z,
+                            glm::degrees(tf.world_rpy.x), glm::degrees(tf.world_rpy.y), glm::degrees(tf.world_rpy.z));
             }
             ImGui::EndTable();
         }
@@ -1094,33 +1084,32 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // Path Planner Panel
     // ------------------------------------------------------------------
-    void RenderPathPlannerPanel(PathPlannerUiState* ui, DebugPlaybackState* playbackState, omnilink::teleop_viewer::RobotScene* scene,
-                                omnilink::teleop_viewer::IkSolver* solver,
-                                const std::vector<omnilink::teleop_viewer::IkChainStatus>& chains) {
+    void RenderPathPlannerPanel(PathPlannerUiState* ui, DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene,
+                                teleop_viewer::IkSolver* solver,
+                                const std::vector<teleop_viewer::IkChainStatus>& chains) {
         if (ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
             return;
         }
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("路径规划");
+        if (!ImGui::CollapsingHeader("路径规划", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
 
-        // Chain selection
         if (!chains.empty()) {
             std::vector<const char*> chain_labels;
             for (const auto& c : chains) {
                 chain_labels.push_back(c.config.label.c_str());
             }
-            ImGui::Combo("控制链", &ui->selected_chain, chain_labels.data(), static_cast<int>(chain_labels.size()));
+            SidebarCombo("控制链", &ui->selected_chain, chain_labels.data(), static_cast<int>(chain_labels.size()));
         }
 
-        // Path type selection
         const char* path_types[] = {"画圆", "画方", "头部往复", "直线", "关节空间PTP"};
-        ImGui::Combo("路径类型", &ui->selected_path_type, path_types, IM_ARRAYSIZE(path_types));
+        SidebarCombo("路径类型", &ui->selected_path_type, path_types, IM_ARRAYSIZE(path_types));
 
         // IK mode selection (only for Cartesian path types)
         if (ui->selected_path_type != 4) {
-            const char* ik_modes[] = {"Single Chain (TRAC-IK)", "Full Body (wbc_chain_ik)"};
-            ImGui::Combo("IK 模式", &ui->ik_mode, ik_modes, IM_ARRAYSIZE(ik_modes));
+            const char* ik_modes[] = {"单链 TRAC-IK", "全身 wbc"};
+            SidebarCombo("IK模式", &ui->ik_mode, ik_modes, IM_ARRAYSIZE(ik_modes));
             if (ui->ik_mode == 0) {
                 ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "⚠ 单链模式可能出现关节跳变");
             } else {

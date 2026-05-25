@@ -6,12 +6,12 @@
 
 namespace kinematic_viewer {
 
-    using CameraConfig        = omnilink::teleop_viewer::CameraConfig;
-    using RobotConfig         = omnilink::teleop_viewer::RobotConfig;
-    using UiConfig            = omnilink::teleop_viewer::UiConfig;
-    using ViewerIkConfig      = omnilink::teleop_viewer::ViewerIkConfig;
-    using ViewerIkChainConfig = omnilink::teleop_viewer::ViewerIkChainConfig;
-    using WindowConfig        = omnilink::teleop_viewer::WindowConfig;
+    using CameraConfig        = teleop_viewer::CameraConfig;
+    using RobotConfig         = teleop_viewer::RobotConfig;
+    using UiConfig            = teleop_viewer::UiConfig;
+    using ViewerIkConfig      = teleop_viewer::ViewerIkConfig;
+    using ViewerIkChainConfig = teleop_viewer::ViewerIkChainConfig;
+    using WindowConfig        = teleop_viewer::WindowConfig;
 
     struct KinematicRosConfig {
         bool enable = true;

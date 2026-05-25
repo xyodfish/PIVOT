@@ -1,6 +1,8 @@
 #pragma once
 
 #include "kinematic_viewer/kinematic_collision_monitor.h"
+#include "kinematic_viewer/kinematic_link_inspector.h"
+#include "kinematic_viewer/kinematic_link_kinematics.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_playback.h"
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
@@ -12,14 +14,18 @@
 namespace kinematic_viewer {
 
     void RenderScenePanel(ViewerState* uiState);
-    void RenderJointPanel(ViewerState* uiState, omnilink::teleop_viewer::RobotScene* scene,
-                          const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints);
+    void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
+                                  teleop_viewer::OrbitCamera* camera, const CollisionMonitorState* collisionState,
+                                  const CollisionMonitorResult* collisionResult, DebugPlaybackState* playbackState,
+                                  CollisionMonitor* collisionMonitor, LinkKinematicsAnalyzer* kinematicsAnalyzer);
+    void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
+                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             omnilink::teleop_viewer::RobotScene* scene,
-                             const std::vector<omnilink::teleop_viewer::RobotScene::JointInfo>& joints);
+                             teleop_viewer::RobotScene* scene,
+                             const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
     void RenderSafetyPanel(CollisionMonitorState* collisionState, const CollisionMonitorResult& collisionResult);
     void RenderObstaclePanel(ViewerState* uiState);
-    void RenderTfPanel(ViewerState* uiState, const std::vector<omnilink::teleop_viewer::RobotScene::LinkTfInfo>& tfs);
+    void RenderTfPanel(ViewerState* uiState, const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs);
 
     // Path planning panel
     struct PathPlannerUiState {
@@ -71,7 +77,7 @@ namespace kinematic_viewer {
     };
 
     void RenderPathPlannerPanel(PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,
-                                omnilink::teleop_viewer::RobotScene* scene, omnilink::teleop_viewer::IkSolver* solver,
-                                const std::vector<omnilink::teleop_viewer::IkChainStatus>& chains);
+                                teleop_viewer::RobotScene* scene, teleop_viewer::IkSolver* solver,
+                                const std::vector<teleop_viewer::IkChainStatus>& chains);
 
 }  // namespace kinematic_viewer

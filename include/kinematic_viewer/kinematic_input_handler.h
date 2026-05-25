@@ -6,6 +6,8 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include <string>
+
 namespace kinematic_viewer {
 
     // Encapsulates all input handling logic: camera orbit/pan/zoom, obstacle picking,
@@ -19,6 +21,12 @@ namespace kinematic_viewer {
         struct ObstaclePickResult {
             bool picked        = false;
             int selected_index = -1;
+        };
+
+        struct LinkPickResult {
+            bool picked             = false;
+            bool throttle_skip      = false;  // true: caller should keep previous hover
+            std::string link_name;
         };
 
         struct UpdateContext {
@@ -52,11 +60,18 @@ namespace kinematic_viewer {
 
         // Call once per frame with current GLFW window and context.
         // Returns camera input result (whether camera consumed the input).
-        CameraInputResult UpdateCamera(omnilink::teleop_viewer::OrbitCamera* camera, const UpdateContext& ctx);
+        CameraInputResult UpdateCamera(teleop_viewer::OrbitCamera* camera, const UpdateContext& ctx);
 
         // Check for obstacle click-pick in the 3D viewport.
         ObstaclePickResult UpdateObstaclePick(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
                                               const UserObstacleState& obstacles);
+
+        LinkPickResult UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
+                                      teleop_viewer::RobotScene* scene);
+
+        // Raycast link under cursor (fast proxy pick, throttled). throttle_skip when not refreshed.
+        LinkPickResult UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
+                                       teleop_viewer::RobotScene* scene, double now_sec);
 
         // Handle sidebar page hotkeys (1-7).
         int HandleSidebarHotkeys(int current_page, bool enable_hotkeys);
@@ -69,6 +84,13 @@ namespace kinematic_viewer {
         double prev_mouse_y_          = 0.0;
         bool first_mouse_             = true;
         bool obstacle_pick_left_prev_ = false;
+        bool link_pick_left_prev_      = false;
+        bool link_pick_drag_tracking_  = false;
+        double link_pick_press_x_      = 0.0;
+        double link_pick_press_y_      = 0.0;
+        double link_hover_last_sec_    = -1.0;
+        static constexpr double kLinkHoverIntervalSec      = 0.05;
+        static constexpr double kLinkPickDragThresholdPx   = 6.0;
 
         bool IsMouseInViewport(double x, double y, int viewport_w, int viewport_h) const;
     };

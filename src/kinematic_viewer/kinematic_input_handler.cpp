@@ -82,7 +82,7 @@ namespace kinematic_viewer {
         return (x >= 0.0 && x < static_cast<double>(viewport_w) && y >= 0.0 && y < static_cast<double>(viewport_h));
     }
 
-    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(omnilink::teleop_viewer::OrbitCamera* camera,
+    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(teleop_viewer::OrbitCamera* camera,
                                                                                  const UpdateContext& ctx) {
         CameraInputResult result;
         if (!camera) {
@@ -102,8 +102,11 @@ namespace kinematic_viewer {
         prev_mouse_y_ = ctx.mouse_y;
 
         bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
-        bool block_camera      = ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.ik_gizmo_over ||
-                            ctx.obs_gizmo_using || ctx.obs_gizmo_over || ctx.imgui_wants_mouse;
+        const bool mouse_in_sidebar =
+            ctx.mouse_x >= static_cast<double>(ctx.viewport_w) && ctx.viewport_w > 0;
+        // Only block orbit when actively using gizmo / side panel; IsOver() covers the whole viewport rect.
+        bool block_camera = ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.obs_gizmo_using ||
+                            (mouse_in_sidebar && ctx.imgui_wants_mouse);
 
         if (!mouse_in_viewport || block_camera) {
             return result;
@@ -132,8 +135,10 @@ namespace kinematic_viewer {
         ObstaclePickResult result;
         bool mouse_in_viewport     = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
         bool obstacle_pick_enabled = (ctx.sidebar_page == 0 || ctx.sidebar_page == 6);
-        bool can_pick = obstacle_pick_enabled && mouse_in_viewport && !ctx.imgui_wants_mouse && !ctx.ik_gizmo_using && !ctx.ik_gizmo_over &&
-                        !ctx.obs_gizmo_using && !ctx.obs_gizmo_over;
+        const bool mouse_in_sidebar =
+            ctx.mouse_x >= static_cast<double>(ctx.viewport_w) && ctx.viewport_w > 0;
+        bool can_pick = obstacle_pick_enabled && mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using &&
+                        !(mouse_in_sidebar && ctx.imgui_wants_mouse);
         if (!can_pick) {
             obstacle_pick_left_prev_ = ctx.left_mouse_down;
             return result;
@@ -168,6 +173,100 @@ namespace kinematic_viewer {
         if (best_index >= 0) {
             result.picked         = true;
             result.selected_index = best_index;
+        }
+        return result;
+    }
+
+    KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view,
+                                                                                const glm::mat4& proj,
+                                                                                teleop_viewer::RobotScene* scene) {
+        LinkPickResult result;
+        if (scene == nullptr) {
+            return result;
+        }
+
+        bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
+        const bool mouse_in_sidebar =
+            ctx.mouse_x >= static_cast<double>(ctx.viewport_w) && ctx.viewport_w > 0;
+        bool can_pick = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using &&
+                        !(mouse_in_sidebar && ctx.imgui_wants_mouse);
+        if (!can_pick) {
+            link_pick_left_prev_     = ctx.left_mouse_down;
+            link_pick_drag_tracking_ = false;
+            return result;
+        }
+
+        const bool left_pressed  = ctx.left_mouse_down && !link_pick_left_prev_;
+        const bool left_released = !ctx.left_mouse_down && link_pick_left_prev_;
+        link_pick_left_prev_     = ctx.left_mouse_down;
+
+        if (left_pressed) {
+            link_pick_drag_tracking_ = true;
+            link_pick_press_x_       = ctx.mouse_x;
+            link_pick_press_y_       = ctx.mouse_y;
+            return result;
+        }
+
+        if (!left_released || !link_pick_drag_tracking_) {
+            return result;
+        }
+        link_pick_drag_tracking_ = false;
+
+        const double drag_dx = ctx.mouse_x - link_pick_press_x_;
+        const double drag_dy = ctx.mouse_y - link_pick_press_y_;
+        if ((drag_dx * drag_dx + drag_dy * drag_dy) > (kLinkPickDragThresholdPx * kLinkPickDragThresholdPx)) {
+            return result;
+        }
+
+        glm::vec3 ray_o(0.0f), ray_d(0.0f);
+        if (!ComputeWorldRayFromScreen(static_cast<float>(ctx.mouse_x), static_cast<float>(ctx.mouse_y), ctx.viewport_w, ctx.viewport_h,
+                                       view, proj, &ray_o, &ray_d)) {
+            return result;
+        }
+
+        std::string picked_link;
+        if (scene->pickLinkByRay(ray_o, ray_d, &picked_link, nullptr, teleop_viewer::RobotScene::LinkPickMode::Accurate)) {
+            result.picked    = true;
+            result.link_name = std::move(picked_link);
+        }
+        return result;
+    }
+
+    KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view,
+                                                                                const glm::mat4& proj,
+                                                                                teleop_viewer::RobotScene* scene,
+                                                                                double now_sec) {
+        LinkPickResult result;
+        if (scene == nullptr) {
+            return result;
+        }
+
+        bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
+        const bool mouse_in_sidebar =
+            ctx.mouse_x >= static_cast<double>(ctx.viewport_w) && ctx.viewport_w > 0;
+        bool can_hover = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using &&
+                         !(mouse_in_sidebar && ctx.imgui_wants_mouse);
+        if (!can_hover) {
+            link_hover_last_sec_ = -1.0;
+            return result;
+        }
+
+        if (link_hover_last_sec_ >= 0.0 && (now_sec - link_hover_last_sec_) < kLinkHoverIntervalSec) {
+            result.throttle_skip = true;
+            return result;
+        }
+        link_hover_last_sec_ = now_sec;
+
+        glm::vec3 ray_o(0.0f), ray_d(0.0f);
+        if (!ComputeWorldRayFromScreen(static_cast<float>(ctx.mouse_x), static_cast<float>(ctx.mouse_y), ctx.viewport_w, ctx.viewport_h,
+                                       view, proj, &ray_o, &ray_d)) {
+            return result;
+        }
+
+        std::string hovered_link;
+        if (scene->pickLinkByRay(ray_o, ray_d, &hovered_link, nullptr, teleop_viewer::RobotScene::LinkPickMode::Fast)) {
+            result.picked    = true;
+            result.link_name = std::move(hovered_link);
         }
         return result;
     }

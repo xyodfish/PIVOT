@@ -32,6 +32,7 @@ uniform vec3 lightPos;
 uniform vec3 viewPos;
 uniform vec3 diffuseColor;
 uniform bool hasTexture;
+uniform float materialAlpha;
 uniform sampler2D texture_diffuse1;
 out vec4 color;
 void main() {
@@ -44,7 +45,7 @@ void main() {
     if (hasTexture) {
         result *= texture(texture_diffuse1, TexCoords).rgb;
     }
-    color = vec4(result, 1.0);
+    color = vec4(result, materialAlpha);
 }
 )";
 

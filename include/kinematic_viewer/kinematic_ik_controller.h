@@ -23,20 +23,20 @@ namespace kinematic_viewer {
         bool InitializeSolver(const std::string& urdf_path, const ViewerIkConfig& ik_cfg);
 
         // Marker target helpers
-        bool EnsureMarkerTargetInitialized(omnilink::teleop_viewer::RobotScene* scene, int chain_index);
-        bool LoadActiveMarkerFromTarget(omnilink::teleop_viewer::RobotScene* scene);
+        bool EnsureMarkerTargetInitialized(teleop_viewer::RobotScene* scene, int chain_index);
+        bool LoadActiveMarkerFromTarget(teleop_viewer::RobotScene* scene);
         void SaveActiveMarkerToTarget();
 
         // IK solve entry points
-        bool ApplyIkForActiveChain(omnilink::teleop_viewer::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
+        bool ApplyIkForActiveChain(teleop_viewer::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
                                    bool prefer_position_only_target);
-        bool RefineActiveChainToMarker(omnilink::teleop_viewer::RobotScene* scene);
+        bool RefineActiveChainToMarker(teleop_viewer::RobotScene* scene);
 
         // Utility
-        float ActiveChainPositionErrorMmToMarker(omnilink::teleop_viewer::RobotScene* scene) const;
+        float ActiveChainPositionErrorMmToMarker(teleop_viewer::RobotScene* scene) const;
 
         // External target application
-        void ApplyExternalTarget(omnilink::teleop_viewer::RobotScene* scene);
+        void ApplyExternalTarget(teleop_viewer::RobotScene* scene);
 
         // Accessors
         IkState* State() const { return ik_state_; }

@@ -134,6 +134,9 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_line_renderer.cpp
     src/kinematic_viewer/kinematic_user_obstacles.cpp
     src/kinematic_viewer/kinematic_path_planner.cpp
+    src/kinematic_viewer/kinematic_link_kinematics.cpp
+    src/kinematic_viewer/kinematic_link_inspector.cpp
+    src/kinematic_viewer/kinematic_robot_tree_panel.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
     deps/glad/glad.c
@@ -159,6 +162,7 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     ${trac_ik_LIBRARIES}
     flex_ik_core
     wbc_chain_ik_core
+    pinocchio::pinocchio
     velocity_planning
     OpenGL::GL
     glfw

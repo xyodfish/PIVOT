@@ -12,8 +12,8 @@
 
 namespace kinematic_viewer {
 
-    using TeleopIkChainStatus = omnilink::teleop_viewer::IkChainStatus;
-    using TeleopIkSolver      = omnilink::teleop_viewer::IkSolver;
+    using TeleopIkChainStatus = teleop_viewer::IkChainStatus;
+    using TeleopIkSolver      = teleop_viewer::IkSolver;
 
     struct ViewerState {
         struct JointInputGroup {
@@ -22,6 +22,10 @@ namespace kinematic_viewer {
         };
 
         bool show_axes                      = true;
+        bool show_visual_meshes             = true;
+        bool show_collision_bodies          = false;
+        bool show_wireframe                 = false;
+        bool show_com                       = false;
         bool show_world_axes                = true;
         bool show_revolute_only             = true;
         bool lock_base                      = true;
@@ -38,8 +42,12 @@ namespace kinematic_viewer {
         char joint_group_input[4096]        = {0};
         char joint_group_values_input[4096] = {0};
         char tf_filter[128]                 = {0};
+        char tree_filter[128]               = {0};
         int selected_joint                  = -1;
         int selected_joint_input_group      = 0;
+        std::string selected_link;
+        std::string hovered_link;
+        float trajectory_min_surface_m      = -1.0f;
         std::unordered_map<std::string, float> pose_snapshot;
         std::vector<JointInputGroup> joint_input_groups;
         std::string joint_group_input_status;

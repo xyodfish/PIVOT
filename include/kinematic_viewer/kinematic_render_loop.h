@@ -27,14 +27,14 @@ namespace kinematic_viewer {
             GLuint mesh_shader = 0;
             GLuint line_shader = 0;
 
-            omnilink::teleop_viewer::RobotScene* scene     = nullptr;
+            teleop_viewer::RobotScene* scene     = nullptr;
             const ViewerState* ui_state                    = nullptr;
             const IkState* ik_state                        = nullptr;
             const CollisionMonitorState* collision_state   = nullptr;
             const CollisionMonitorResult* collision_result = nullptr;
             const UserObstacleGpuMeshes* obstacle_meshes   = nullptr;
 
-            const omnilink::teleop_viewer::OrbitCamera* camera = nullptr;
+            const teleop_viewer::OrbitCamera* camera = nullptr;
 
             // Path planning preview (optional, may be null)
             const std::vector<CartesianWaypoint>* planned_path = nullptr;
@@ -61,6 +61,7 @@ namespace kinematic_viewer {
         void BuildJointAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildCollisionLine(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildPlannedPathLines(const Context& ctx, std::vector<KinematicLineVertex>* out);
+        void BuildSelectedLinkHighlight(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void DrawLineOverlays(GLuint shader, const Context& ctx, const std::vector<KinematicLineVertex>& vertices, const glm::mat4& view,
                               const glm::mat4& proj);
     };

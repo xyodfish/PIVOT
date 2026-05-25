@@ -23,7 +23,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
     namespace {
 
         struct Vertex {
@@ -75,12 +75,18 @@ namespace omnilink::teleop_viewer {
                 glBindVertexArray(0);
             }
 
+            bool hasValidTexture() const {
+                return !textures.empty() && textures[0].id != 0;
+            }
+
             void draw(GLuint shader, const glm::vec3* override_color = nullptr, bool force_color_only = false) {
                 glBindVertexArray(vao);
                 const glm::vec3 color = override_color ? *override_color : diffuse_color;
                 glUniform3f(glGetUniformLocation(shader, "diffuseColor"), color.r, color.g, color.b);
-                if (!textures.empty() && !force_color_only) {
+                const bool use_texture = hasValidTexture() && !force_color_only;
+                if (use_texture) {
                     glUniform1i(glGetUniformLocation(shader, "hasTexture"), true);
+                    glUniform1i(glGetUniformLocation(shader, "texture_diffuse1"), 0);
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, textures[0].id);
                 } else {
@@ -163,11 +169,17 @@ namespace omnilink::teleop_viewer {
                     if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
                         aiString str;
                         material->GetTexture(aiTextureType_DIFFUSE, 0, &str);
-                        std::string tex_path = directory + "/" + str.C_Str();
-                        Texture tex;
-                        tex.id   = loadTexture(tex_path);
-                        tex.type = "texture_diffuse";
-                        m.textures.push_back(tex);
+                        std::string tex_path = str.C_Str();
+                        if (!tex_path.empty() && tex_path[0] != '/') {
+                            tex_path = directory.empty() ? tex_path : (directory + "/" + tex_path);
+                        }
+                        const unsigned int tex_id = loadTexture(tex_path);
+                        if (tex_id != 0) {
+                            Texture tex;
+                            tex.id   = tex_id;
+                            tex.type = "texture_diffuse";
+                            m.textures.push_back(tex);
+                        }
                     }
                 }
 
@@ -176,29 +188,31 @@ namespace omnilink::teleop_viewer {
             }
 
             unsigned int loadTexture(const std::string& path) {
-                unsigned int texture_id;
-                glGenTextures(1, &texture_id);
+                if (path.empty()) {
+                    return 0;
+                }
 
                 int width           = 0;
                 int height          = 0;
                 int nr_components   = 0;
                 unsigned char* data = stbi_load(path.c_str(), &width, &height, &nr_components, 0);
-
-                if (data) {
-                    GLenum format = nr_components == 1 ? GL_RED : nr_components == 3 ? GL_RGB : GL_RGBA;
-                    glBindTexture(GL_TEXTURE_2D, texture_id);
-                    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-                    glGenerateMipmap(GL_TEXTURE_2D);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    stbi_image_free(data);
-                } else {
+                if (!data || width <= 0 || height <= 0) {
                     std::cerr << "Texture failed to load at path: " << path << std::endl;
                     stbi_image_free(data);
+                    return 0;
                 }
 
+                unsigned int texture_id = 0;
+                glGenTextures(1, &texture_id);
+                GLenum format = nr_components == 1 ? GL_RED : nr_components == 3 ? GL_RGB : GL_RGBA;
+                glBindTexture(GL_TEXTURE_2D, texture_id);
+                glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+                glGenerateMipmap(GL_TEXTURE_2D);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                stbi_image_free(data);
                 return texture_id;
             }
         };
@@ -225,6 +239,137 @@ namespace omnilink::teleop_viewer {
             glm::vec3 local_center    = glm::vec3(0.0f);
             float radius_m            = 0.0f;
         };
+
+        enum class CollisionGeomKind { Sphere, Box, Cylinder, Mesh };
+
+        struct CollisionVisual {
+            std::string link_name;
+            glm::mat4 local_transform = glm::mat4(1.0f);
+            CollisionGeomKind kind    = CollisionGeomKind::Sphere;
+            glm::vec3 params          = glm::vec3(0.1f);
+            Model model;
+            bool loaded               = false;
+        };
+
+        void appendMeshTriangle(Mesh* mesh, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
+            if (mesh == nullptr) {
+                return;
+            }
+            const unsigned int base = static_cast<unsigned int>(mesh->vertices.size());
+            auto push_vertex          = [&](const glm::vec3& p, const glm::vec3& n) {
+                Vertex v;
+                v.position   = p;
+                v.normal     = n;
+                v.tex_coords = glm::vec2(0.0f);
+                mesh->vertices.push_back(v);
+            };
+            const glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
+            push_vertex(a, n);
+            push_vertex(b, n);
+            push_vertex(c, n);
+            mesh->indices.push_back(base);
+            mesh->indices.push_back(base + 1);
+            mesh->indices.push_back(base + 2);
+        }
+
+        void buildUnitSphereMesh(Model* model, int stacks = 14, int sectors = 22) {
+            if (model == nullptr) {
+                return;
+            }
+            Mesh mesh;
+            for (int iy = 0; iy <= stacks; ++iy) {
+                const float v     = static_cast<float>(iy) / static_cast<float>(stacks);
+                const float phi   = glm::pi<float>() * v;
+                const float sin_p = std::sin(phi);
+                const float cos_p = std::cos(phi);
+                for (int ix = 0; ix <= sectors; ++ix) {
+                    const float u     = static_cast<float>(ix) / static_cast<float>(sectors);
+                    const float theta = glm::two_pi<float>() * u;
+                    const glm::vec3 p(0.5f * sin_p * std::cos(theta), 0.5f * sin_p * std::sin(theta), 0.5f * cos_p);
+                    Vertex vtx;
+                    vtx.position   = p;
+                    vtx.normal     = glm::normalize(p);
+                    vtx.tex_coords = glm::vec2(u, v);
+                    mesh.vertices.push_back(vtx);
+                }
+            }
+            for (int iy = 0; iy < stacks; ++iy) {
+                for (int ix = 0; ix < sectors; ++ix) {
+                    const int cur  = iy * (sectors + 1) + ix;
+                    const int next = cur + sectors + 1;
+                    mesh.indices.push_back(static_cast<unsigned int>(cur));
+                    mesh.indices.push_back(static_cast<unsigned int>(next));
+                    mesh.indices.push_back(static_cast<unsigned int>(cur + 1));
+                    mesh.indices.push_back(static_cast<unsigned int>(cur + 1));
+                    mesh.indices.push_back(static_cast<unsigned int>(next));
+                    mesh.indices.push_back(static_cast<unsigned int>(next + 1));
+                }
+            }
+            mesh.setup();
+            model->meshes.push_back(std::move(mesh));
+        }
+
+        void buildUnitBoxMesh(Model* model) {
+            if (model == nullptr) {
+                return;
+            }
+            Mesh mesh;
+            const glm::vec3 corners[8] = {
+                {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
+                {-0.5f, -0.5f, 0.5f},  {0.5f, -0.5f, 0.5f},  {0.5f, 0.5f, 0.5f},  {-0.5f, 0.5f, 0.5f},
+            };
+            const int faces[12][3] = {
+                {0, 1, 2}, {0, 2, 3}, {4, 6, 5}, {4, 7, 6}, {0, 4, 5}, {0, 5, 1},
+                {2, 6, 7}, {2, 7, 3}, {0, 3, 7}, {0, 7, 4}, {1, 5, 6}, {1, 6, 2},
+            };
+            for (const auto& face : faces) {
+                appendMeshTriangle(&mesh, corners[face[0]], corners[face[1]], corners[face[2]]);
+            }
+            mesh.setup();
+            model->meshes.push_back(std::move(mesh));
+        }
+
+        void buildUnitCylinderMesh(Model* model, int sectors = 24) {
+            if (model == nullptr) {
+                return;
+            }
+            Mesh mesh;
+            const float half_z = 0.5f;
+            for (int i = 0; i < sectors; ++i) {
+                const float a0 = glm::two_pi<float>() * static_cast<float>(i) / static_cast<float>(sectors);
+                const float a1 = glm::two_pi<float>() * static_cast<float>(i + 1) / static_cast<float>(sectors);
+                const glm::vec3 p0(0.5f * std::cos(a0), 0.5f * std::sin(a0), -half_z);
+                const glm::vec3 p1(0.5f * std::cos(a1), 0.5f * std::sin(a1), -half_z);
+                const glm::vec3 p2(0.5f * std::cos(a1), 0.5f * std::sin(a1), half_z);
+                const glm::vec3 p3(0.5f * std::cos(a0), 0.5f * std::sin(a0), half_z);
+                appendMeshTriangle(&mesh, p0, p1, p2);
+                appendMeshTriangle(&mesh, p0, p2, p3);
+            }
+            const glm::vec3 top(0.0f, 0.0f, half_z);
+            const glm::vec3 bottom(0.0f, 0.0f, -half_z);
+            for (int i = 0; i < sectors; ++i) {
+                const float a0 = glm::two_pi<float>() * static_cast<float>(i) / static_cast<float>(sectors);
+                const float a1 = glm::two_pi<float>() * static_cast<float>(i + 1) / static_cast<float>(sectors);
+                appendMeshTriangle(&mesh, top, glm::vec3(0.5f * std::cos(a0), 0.5f * std::sin(a0), half_z),
+                                   glm::vec3(0.5f * std::cos(a1), 0.5f * std::sin(a1), half_z));
+                appendMeshTriangle(&mesh, bottom, glm::vec3(0.5f * std::cos(a1), 0.5f * std::sin(a1), -half_z),
+                                   glm::vec3(0.5f * std::cos(a0), 0.5f * std::sin(a0), -half_z));
+            }
+            mesh.setup();
+            model->meshes.push_back(std::move(mesh));
+        }
+
+        bool linkVisualNeedsHighlight(const std::string& link_name, const RobotScene::SceneDrawStyle& style) {
+            return (!style.selected_link.empty() && link_name == style.selected_link) ||
+                   (!style.hovered_link.empty() && link_name == style.hovered_link);
+        }
+
+        glm::vec3 linkVisualHighlightColor(const std::string& link_name, const RobotScene::SceneDrawStyle& style) {
+            if (!style.selected_link.empty() && link_name == style.selected_link) {
+                return glm::vec3(0.30f, 0.88f, 1.0f);
+            }
+            return glm::vec3(1.0f, 0.72f, 0.18f);
+        }
 
         struct JointState {
             std::string name;
@@ -257,11 +402,60 @@ namespace omnilink::teleop_viewer {
 
     }  // namespace
 
+        struct LinkInertialLocal {
+            std::string link_name;
+            glm::mat4 local_transform = glm::mat4(1.0f);
+        };
+
+        struct PickMeshTriangle {
+            std::string link_name;
+            glm::vec3 v0 = glm::vec3(0.0f);
+            glm::vec3 v1 = glm::vec3(0.0f);
+            glm::vec3 v2 = glm::vec3(0.0f);
+        };
+
+        bool intersectRayTriangle(const glm::vec3& ray_o, const glm::vec3& ray_d, const glm::vec3& v0, const glm::vec3& v1,
+                                  const glm::vec3& v2, float* out_t) {
+            const float eps  = 1e-6f;
+            const glm::vec3 e1  = v1 - v0;
+            const glm::vec3 e2  = v2 - v0;
+            const glm::vec3 pvec = glm::cross(ray_d, e2);
+            const float det       = glm::dot(e1, pvec);
+            if (std::fabs(det) < eps) {
+                return false;
+            }
+            const float inv_det = 1.0f / det;
+            const glm::vec3 tvec = ray_o - v0;
+            const float u        = glm::dot(tvec, pvec) * inv_det;
+            if (u < 0.0f || u > 1.0f) {
+                return false;
+            }
+            const glm::vec3 qvec = glm::cross(tvec, e1);
+            const float v        = glm::dot(ray_d, qvec) * inv_det;
+            if (v < 0.0f || u + v > 1.0f) {
+                return false;
+            }
+            const float t = glm::dot(e2, qvec) * inv_det;
+            if (t <= eps) {
+                return false;
+            }
+            if (out_t != nullptr) {
+                *out_t = t;
+            }
+            return true;
+        }
+
     struct RobotScene::Impl {
         std::map<std::string, LinkVisual> visuals;
         std::vector<LocalCollisionProxy> collision_proxies_local;
+        std::vector<CollisionVisual> collision_visuals;
         std::map<std::string, glm::mat4> transforms;
         std::map<std::string, std::string> link_parent;
+        std::unordered_map<std::string, LinkInertialLocal> link_inertials;
+        std::vector<PickMeshTriangle> pick_mesh_triangles;
+        bool pick_mesh_cache_dirty = true;
+        std::unordered_map<std::string, std::string> link_to_parent_joint;
+        std::unordered_map<std::string, JointDetailInfo> joint_details;
         std::vector<JointState> joint_states;
         std::vector<JointAxisState> joint_axis_states;
         std::unordered_map<std::string, size_t> joint_axis_index;
@@ -326,6 +520,37 @@ namespace omnilink::teleop_viewer {
             }
         }
 
+        void rebuildPickMeshCache() {
+            pick_mesh_triangles.clear();
+            for (const auto& [visual_key, lv] : visuals) {
+                (void)visual_key;
+                if (!lv.loaded) {
+                    continue;
+                }
+                const auto it = transforms.find(lv.parent_link_name);
+                if (it == transforms.end()) {
+                    continue;
+                }
+                const glm::mat4 model_mat =
+                    it->second * lv.local_transform * glm::scale(glm::mat4(1.0f), lv.scale);
+                for (const auto& mesh : lv.model.meshes) {
+                    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+                        const auto world_vertex = [&](unsigned int idx) -> glm::vec3 {
+                            const glm::vec3 local = mesh.vertices[mesh.indices[idx]].position;
+                            const glm::vec4 world = model_mat * glm::vec4(local, 1.0f);
+                            return glm::vec3(world);
+                        };
+                        PickMeshTriangle tri;
+                        tri.link_name = lv.parent_link_name;
+                        tri.v0        = world_vertex(static_cast<unsigned int>(i));
+                        tri.v1        = world_vertex(static_cast<unsigned int>(i + 1));
+                        tri.v2        = world_vertex(static_cast<unsigned int>(i + 2));
+                        pick_mesh_triangles.push_back(tri);
+                    }
+                }
+            }
+        }
+
         bool buildCollisionProxyFromGeometry(const urdf::CollisionSharedPtr& collision, const std::string& link_name,
                                              const std::string& collision_name, LocalCollisionProxy* out_proxy) const {
             if (collision == nullptr || collision->geometry == nullptr || out_proxy == nullptr) {
@@ -382,6 +607,68 @@ namespace omnilink::teleop_viewer {
             }
 
             return false;
+        }
+
+        bool buildCollisionVisualFromGeometry(const urdf::CollisionSharedPtr& collision, const std::string& link_name,
+                                              const std::string& collision_name, LocalCollisionProxy* out_proxy,
+                                              CollisionVisual* out_visual) const {
+            if (!buildCollisionProxyFromGeometry(collision, link_name, collision_name, out_proxy)) {
+                return false;
+            }
+            if (out_visual == nullptr || collision->geometry == nullptr) {
+                return true;
+            }
+
+            out_visual->link_name       = link_name;
+            out_visual->local_transform = out_proxy->local_transform;
+            out_visual->loaded          = false;
+            out_visual->model.meshes.clear();
+
+            if (collision->geometry->type == urdf::Geometry::SPHERE) {
+                auto sphere         = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
+                out_visual->kind    = CollisionGeomKind::Sphere;
+                const float radius  = static_cast<float>(sphere->radius);
+                out_visual->params  = glm::vec3(radius, radius, radius);
+                buildUnitSphereMesh(&out_visual->model);
+                out_visual->loaded = !out_visual->model.meshes.empty();
+                return true;
+            }
+
+            if (collision->geometry->type == urdf::Geometry::BOX) {
+                auto box           = std::static_pointer_cast<urdf::Box>(collision->geometry);
+                out_visual->kind   = CollisionGeomKind::Box;
+                out_visual->params = glm::vec3(static_cast<float>(box->dim.x), static_cast<float>(box->dim.y),
+                                                static_cast<float>(box->dim.z));
+                buildUnitBoxMesh(&out_visual->model);
+                out_visual->loaded = !out_visual->model.meshes.empty();
+                return true;
+            }
+
+            if (collision->geometry->type == urdf::Geometry::CYLINDER) {
+                auto cylinder      = std::static_pointer_cast<urdf::Cylinder>(collision->geometry);
+                out_visual->kind   = CollisionGeomKind::Cylinder;
+                out_visual->params = glm::vec3(static_cast<float>(cylinder->radius), static_cast<float>(cylinder->radius),
+                                               static_cast<float>(cylinder->length));
+                buildUnitCylinderMesh(&out_visual->model);
+                out_visual->loaded = !out_visual->model.meshes.empty();
+                return true;
+            }
+
+            if (collision->geometry->type == urdf::Geometry::MESH) {
+                auto mesh                   = std::static_pointer_cast<urdf::Mesh>(collision->geometry);
+                const std::string mesh_file = resolvePath(mesh->filename);
+                if (mesh_file.empty()) {
+                    return true;
+                }
+                out_visual->kind = CollisionGeomKind::Mesh;
+                out_visual->params =
+                    glm::vec3(static_cast<float>(mesh->scale.x), static_cast<float>(mesh->scale.y), static_cast<float>(mesh->scale.z));
+                out_visual->model.loadAssimp(mesh_file);
+                out_visual->loaded = !out_visual->model.meshes.empty();
+                return true;
+            }
+
+            return true;
         }
 
         std::string resolvePath(const std::string& path) const {
@@ -445,14 +732,37 @@ namespace omnilink::teleop_viewer {
             return path;
         }
 
+        static std::string JointTypeToString(int joint_type) {
+            switch (joint_type) {
+                case urdf::Joint::REVOLUTE:
+                    return "revolute";
+                case urdf::Joint::CONTINUOUS:
+                    return "continuous";
+                case urdf::Joint::PRISMATIC:
+                    return "prismatic";
+                case urdf::Joint::FIXED:
+                    return "fixed";
+                case urdf::Joint::FLOATING:
+                    return "floating";
+                case urdf::Joint::PLANAR:
+                    return "planar";
+                default:
+                    return "unknown";
+            }
+        }
+
         void initJointStates(urdf::ModelInterfaceSharedPtr model) {
             joint_states.clear();
             joint_axis_states.clear();
             joint_axis_index.clear();
+            joint_details.clear();
+            link_to_parent_joint.clear();
             std::function<void(urdf::LinkConstSharedPtr)> collectJoints = [&](urdf::LinkConstSharedPtr link) {
                 for (auto& child_link : link->child_links) {
                     auto joint = child_link->parent_joint;
                     if (joint) {
+                        link_to_parent_joint[child_link->name] = joint->name;
+
                         JointState js;
                         js.name      = joint->name;
                         js.position  = 0.0f;
@@ -461,13 +771,28 @@ namespace omnilink::teleop_viewer {
                         js.revolute  = (joint->type == urdf::Joint::REVOLUTE || joint->type == urdf::Joint::CONTINUOUS);
                         joint_states.push_back(js);
 
-                        JointAxisState axis_state;
-                        axis_state.name = joint->name;
+                        JointDetailInfo detail;
+                        detail.name        = joint->name;
+                        detail.parent_link = joint->parent_link_name;
+                        detail.child_link  = child_link->name;
+                        detail.type        = JointTypeToString(joint->type);
+                        detail.revolute    = js.revolute;
+                        detail.has_limits  = (joint->limits != nullptr);
+                        detail.lower_limit = js.min_angle;
+                        detail.upper_limit = js.max_angle;
+                        if (joint->limits && joint->limits->velocity > 0.0) {
+                            detail.velocity_limit = static_cast<float>(joint->limits->velocity);
+                        }
                         glm::vec3 axis(joint->axis.x, joint->axis.y, joint->axis.z);
                         if (glm::length(axis) < 1e-6f) {
                             axis = glm::vec3(0.0f, 0.0f, 1.0f);
                         }
-                        axis_state.axis_local             = glm::normalize(axis);
+                        detail.axis_local = glm::normalize(axis);
+                        joint_details[detail.name] = detail;
+
+                        JointAxisState axis_state;
+                        axis_state.name = joint->name;
+                        axis_state.axis_local             = detail.axis_local;
                         axis_state.revolute               = js.revolute;
                         joint_axis_index[axis_state.name] = joint_axis_states.size();
                         joint_axis_states.push_back(axis_state);
@@ -508,13 +833,24 @@ namespace omnilink::teleop_viewer {
 
         impl_->visuals.clear();
         impl_->collision_proxies_local.clear();
+        impl_->collision_visuals.clear();
         impl_->transforms.clear();
         impl_->link_parent.clear();
+        impl_->link_inertials.clear();
+        impl_->pick_mesh_triangles.clear();
+        impl_->pick_mesh_cache_dirty = true;
 
         std::function<void(urdf::LinkConstSharedPtr, const glm::mat4&, const std::string&)> traverse =
             [&](urdf::LinkConstSharedPtr link, const glm::mat4& parent_transform, const std::string& parent_name) {
                 impl_->transforms[link->name]  = parent_transform;
                 impl_->link_parent[link->name] = parent_name;
+
+                if (link->inertial) {
+                    LinkInertialLocal inertial;
+                    inertial.link_name        = link->name;
+                    inertial.local_transform  = poseToTransform(link->inertial->origin);
+                    impl_->link_inertials[link->name] = inertial;
+                }
 
                 for (size_t i = 0; i < link->visual_array.size(); ++i) {
                     auto visual = link->visual_array[i];
@@ -567,10 +903,15 @@ namespace omnilink::teleop_viewer {
                         collision_name = link->name + "_collision_" + std::to_string(i);
                     }
                     LocalCollisionProxy local_proxy;
-                    if (!impl_->buildCollisionProxyFromGeometry(collision, link->name, collision_name, &local_proxy)) {
+                    CollisionVisual collision_visual;
+                    if (!impl_->buildCollisionVisualFromGeometry(collision, link->name, collision_name, &local_proxy,
+                                                                 &collision_visual)) {
                         continue;
                     }
                     impl_->collision_proxies_local.push_back(std::move(local_proxy));
+                    if (collision_visual.loaded) {
+                        impl_->collision_visuals.push_back(std::move(collision_visual));
+                    }
                 }
 
                 for (auto& child_link : link->child_links) {
@@ -696,32 +1037,105 @@ namespace omnilink::teleop_viewer {
         };
 
         traverse(impl_->urdf_model->getRoot(), impl_->rootWorldTransform());
+        impl_->pick_mesh_cache_dirty = true;
     }
 
-    void RobotScene::draw(GLuint shader) {
-        for (auto& [visual_key, lv] : impl_->visuals) {
-            (void)visual_key;
-            if (!lv.loaded) {
+    void RobotScene::draw(GLuint shader, const SceneDrawStyle& style) {
+        const GLint loc_alpha = glGetUniformLocation(shader, "materialAlpha");
+
+        if (style.show_visual_meshes) {
+            if (style.wireframe_visuals) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            }
+            if (loc_alpha >= 0) {
+                glUniform1f(loc_alpha, 1.0f);
+            }
+            for (auto& [visual_key, lv] : impl_->visuals) {
+                (void)visual_key;
+                if (!lv.loaded) {
+                    continue;
+                }
+
+                auto it = impl_->transforms.find(lv.parent_link_name);
+                if (it == impl_->transforms.end()) {
+                    continue;
+                }
+
+                glm::mat4 link_global = it->second;
+                glm::mat4 model_mat   = link_global * lv.local_transform;
+                model_mat             = model_mat * glm::scale(glm::mat4(1.0f), lv.scale);
+
+                const bool highlight_visual = linkVisualNeedsHighlight(lv.parent_link_name, style);
+                glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model_mat));
+                for (auto& mesh : lv.model.meshes) {
+                    if (highlight_visual) {
+                        const glm::vec3 highlight_color = linkVisualHighlightColor(lv.parent_link_name, style);
+                        mesh.draw(shader, &highlight_color, true);
+                    } else if (mesh.hasValidTexture()) {
+                        mesh.draw(shader, nullptr, false);
+                    } else {
+                        const glm::vec3 base_color = lv.has_urdf_color ? lv.urdf_color : mesh.diffuse_color;
+                        mesh.draw(shader, &base_color, true);
+                    }
+                }
+            }
+            if (style.wireframe_visuals) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            }
+        }
+
+        if (!style.show_collision_bodies) {
+            return;
+        }
+
+        const glm::vec3 collision_color(0.58f, 0.28f, 0.92f);
+        const bool highlight_collision =
+            !style.hovered_link.empty() || !style.selected_link.empty();
+
+        for (auto& cv : impl_->collision_visuals) {
+            if (!cv.loaded) {
                 continue;
             }
-
-            auto it = impl_->transforms.find(lv.parent_link_name);
+            auto it = impl_->transforms.find(cv.link_name);
             if (it == impl_->transforms.end()) {
                 continue;
             }
 
-            glm::mat4 link_global = it->second;
-            glm::mat4 model_mat   = link_global * lv.local_transform;
-            model_mat             = model_mat * glm::scale(glm::mat4(1.0f), lv.scale);
+            glm::mat4 model_mat = it->second * cv.local_transform;
+            if (cv.kind == CollisionGeomKind::Box) {
+                model_mat = model_mat * glm::scale(glm::mat4(1.0f), cv.params);
+            } else if (cv.kind == CollisionGeomKind::Sphere) {
+                const float r = std::max(cv.params.x, 1e-4f);
+                model_mat     = model_mat * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f * r));
+            } else if (cv.kind == CollisionGeomKind::Cylinder) {
+                model_mat = model_mat * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f * cv.params.x, 2.0f * cv.params.y, cv.params.z));
+            } else if (cv.kind == CollisionGeomKind::Mesh) {
+                model_mat = model_mat * glm::scale(glm::mat4(1.0f), cv.params);
+            }
+
+            glm::vec3 draw_color = collision_color;
+            if (!style.selected_link.empty() && cv.link_name == style.selected_link) {
+                draw_color = glm::vec3(0.35f, 0.90f, 1.0f);
+            } else if (!style.hovered_link.empty() && cv.link_name == style.hovered_link) {
+                draw_color = glm::vec3(1.0f, 0.78f, 0.30f);
+            }
+
+            const float alpha =
+                (highlight_collision &&
+                 (cv.link_name == style.hovered_link || cv.link_name == style.selected_link))
+                    ? 0.72f
+                    : 0.48f;
+            if (loc_alpha >= 0) {
+                glUniform1f(loc_alpha, alpha);
+            }
 
             glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model_mat));
-            for (auto& mesh : lv.model.meshes) {
-                if (lv.has_urdf_color) {
-                    mesh.draw(shader, &lv.urdf_color, true);
-                } else {
-                    mesh.draw(shader);
-                }
+            for (auto& mesh : cv.model.meshes) {
+                mesh.draw(shader, &draw_color, true);
             }
+        }
+        if (loc_alpha >= 0) {
+            glUniform1f(loc_alpha, 1.0f);
         }
     }
 
@@ -902,6 +1316,147 @@ namespace omnilink::teleop_viewer {
         return true;
     }
 
+    bool RobotScene::getParentJointNameForLink(const std::string& link_name, std::string* out_joint_name) const {
+        if (out_joint_name == nullptr) {
+            return false;
+        }
+        const auto it = impl_->link_to_parent_joint.find(link_name);
+        if (it == impl_->link_to_parent_joint.end()) {
+            return false;
+        }
+        *out_joint_name = it->second;
+        return true;
+    }
+
+    bool RobotScene::getJointDetail(const std::string& joint_name, JointDetailInfo* out) const {
+        if (out == nullptr) {
+            return false;
+        }
+        const auto it = impl_->joint_details.find(joint_name);
+        if (it == impl_->joint_details.end()) {
+            return false;
+        }
+        *out = it->second;
+        for (const auto& js : impl_->joint_states) {
+            if (js.name == joint_name) {
+                out->position = js.position;
+                break;
+            }
+        }
+        return true;
+    }
+
+    std::vector<RobotScene::LinkComInfo> RobotScene::getLinkComWorldPositions() const {
+        std::vector<LinkComInfo> out;
+        for (const auto& [link_name, inertial] : impl_->link_inertials) {
+            const auto it = impl_->transforms.find(link_name);
+            if (it == impl_->transforms.end()) {
+                continue;
+            }
+            const glm::vec4 world = it->second * inertial.local_transform * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            LinkComInfo info;
+            info.link_name        = link_name;
+            info.world_position   = glm::vec3(world);
+            out.push_back(info);
+        }
+        return out;
+    }
+
+    bool RobotScene::pickLinkByRay(const glm::vec3& ray_origin, const glm::vec3& ray_dir, std::string* out_link_name, float* out_hit_t,
+                                   LinkPickMode mode) {
+        if (out_link_name == nullptr || glm::length(ray_dir) < 1e-8f) {
+            return false;
+        }
+        const glm::vec3 dir = glm::normalize(ray_dir);
+
+        if (mode == LinkPickMode::Accurate) {
+            if (impl_->pick_mesh_cache_dirty) {
+                impl_->rebuildPickMeshCache();
+                impl_->pick_mesh_cache_dirty = false;
+            }
+            std::string mesh_best_link;
+            float mesh_best_t = 1e9f;
+            for (const auto& tri : impl_->pick_mesh_triangles) {
+                float hit_t = 0.0f;
+                if (!intersectRayTriangle(ray_origin, dir, tri.v0, tri.v1, tri.v2, &hit_t)) {
+                    continue;
+                }
+                if (hit_t < mesh_best_t) {
+                    mesh_best_t    = hit_t;
+                    mesh_best_link = tri.link_name;
+                }
+            }
+            if (!mesh_best_link.empty()) {
+                *out_link_name = mesh_best_link;
+                if (out_hit_t != nullptr) {
+                    *out_hit_t = mesh_best_t;
+                }
+                return true;
+            }
+        }
+
+        auto intersectRaySphere = [](const glm::vec3& ray_o, const glm::vec3& ray_d, const glm::vec3& c, float r, float* out_t) {
+            const glm::vec3 oc = ray_o - c;
+            const float a      = glm::dot(ray_d, ray_d);
+            const float b      = 2.0f * glm::dot(oc, ray_d);
+            const float cc     = glm::dot(oc, oc) - r * r;
+            const float disc   = b * b - 4.0f * a * cc;
+            if (disc < 0.0f) {
+                return false;
+            }
+            const float sqrt_disc = std::sqrt(disc);
+            const float t0        = (-b - sqrt_disc) / (2.0f * a);
+            const float t1        = (-b + sqrt_disc) / (2.0f * a);
+            float t_hit           = -1.0f;
+            if (t0 > 0.0f) {
+                t_hit = t0;
+            } else if (t1 > 0.0f) {
+                t_hit = t1;
+            }
+            if (t_hit <= 0.0f) {
+                return false;
+            }
+            if (out_t != nullptr) {
+                *out_t = t_hit;
+            }
+            return true;
+        };
+
+        std::unordered_map<std::string, float> best_t_by_link;
+        for (const auto& proxy : getLinkCollisionProxies()) {
+            float hit_t = 0.0f;
+            const float pick_radius = std::max(proxy.radius_m * 1.05f, 0.02f);
+            if (!intersectRaySphere(ray_origin, dir, proxy.world_center, pick_radius, &hit_t)) {
+                continue;
+            }
+            auto it = best_t_by_link.find(proxy.link_name);
+            if (it == best_t_by_link.end() || hit_t < it->second) {
+                best_t_by_link[proxy.link_name] = hit_t;
+            }
+        }
+
+        std::string best_link;
+        float best_t = 1e9f;
+        for (const auto& kv : best_t_by_link) {
+            if (kv.second < best_t) {
+                best_t     = kv.second;
+                best_link  = kv.first;
+            }
+        }
+        if (best_link.empty()) {
+            return false;
+        }
+        *out_link_name = best_link;
+        if (out_hit_t != nullptr) {
+            *out_hit_t = best_t;
+        }
+        return true;
+    }
+
+    const std::string& RobotScene::urdfFilePath() const {
+        return impl_->urdf_file_path;
+    }
+
     void RobotScene::setFixedBaseMode(bool enabled) {
         impl_->fixed_base_mode = enabled;
     }
@@ -967,4 +1522,4 @@ namespace omnilink::teleop_viewer {
         target += (-right * dx + up * dy) * (pan_scale * distance);
     }
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

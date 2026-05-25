@@ -18,6 +18,6 @@ namespace kinematic_viewer {
         std::string detail;
     };
 
-    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, omnilink::teleop_viewer::RobotScene* scene);
+    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, teleop_viewer::RobotScene* scene);
 
 }  // namespace kinematic_viewer

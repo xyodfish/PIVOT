@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
 
     struct WindowConfig {
         int width         = 1280;
@@ -79,4 +79,4 @@ namespace omnilink::teleop_viewer {
         };
     };
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

@@ -314,8 +314,8 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // IK Solver for Cartesian Path (serial solve with scene state update)
     // ------------------------------------------------------------------
-    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, omnilink::teleop_viewer::RobotScene* scene,
-                                                 omnilink::teleop_viewer::IkSolver* solver, int chain_index,
+    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
+                                                 teleop_viewer::IkSolver* solver, int chain_index,
                                                  const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;
         if (!cartesian_path.success || cartesian_path.waypoints.empty()) {
@@ -379,7 +379,7 @@ namespace kinematic_viewer {
                 std::vector<float> positions;
                 positions.reserve(joint_names.size());
                 for (const auto& name : joint_names) {
-                    omnilink::teleop_viewer::RobotScene::JointInfo info;
+                    teleop_viewer::RobotScene::JointInfo info;
                     if (scene->getJointInfo(name, &info)) {
                         positions.push_back(info.position);
                     } else {
@@ -414,8 +414,8 @@ namespace kinematic_viewer {
     // IK Solver for Cartesian Path (Full Body Mode)
     // ------------------------------------------------------------------
     JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path,
-                                                         omnilink::teleop_viewer::RobotScene* scene,
-                                                         omnilink::teleop_viewer::IkSolver* solver, int chain_index,
+                                                         teleop_viewer::RobotScene* scene,
+                                                         teleop_viewer::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;
         if (!cartesian_path.success || cartesian_path.waypoints.empty()) {
@@ -476,7 +476,7 @@ namespace kinematic_viewer {
             targets[static_cast<size_t>(chain_index)]    = glm::mat4_cast(wp.orientation);
             targets[static_cast<size_t>(chain_index)][3] = glm::vec4(wp.position, 1.0f);
 
-            omnilink::teleop_viewer::IkSolveStats stats;
+            teleop_viewer::IkSolveStats stats;
             std::string ik_status;
             bool ik_success = solver->solveFullBody(scene, targets, 1, chain_index, false, false, &stats, &ik_status);
 
@@ -495,7 +495,7 @@ namespace kinematic_viewer {
                 std::vector<float> positions;
                 positions.reserve(joint_names.size());
                 for (const auto& name : joint_names) {
-                    omnilink::teleop_viewer::RobotScene::JointInfo info;
+                    teleop_viewer::RobotScene::JointInfo info;
                     if (scene->getJointInfo(name, &info)) {
                         positions.push_back(info.position);
                     } else {

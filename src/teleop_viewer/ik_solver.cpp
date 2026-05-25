@@ -15,7 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
     namespace {
 
         pinocchio::Model BuildFloatingBaseModelForWbc(const std::string& urdfPath, bool* hasFloatingBase) {
@@ -1115,4 +1115,4 @@ namespace omnilink::teleop_viewer {
         return success;
     }
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

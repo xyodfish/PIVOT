@@ -10,7 +10,7 @@
 
 #include "teleop_viewer/types.h"
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
 
     class OrbitCamera {
        public:
@@ -63,13 +63,40 @@ namespace omnilink::teleop_viewer {
             float radius_m         = 0.0f;
         };
 
+        struct LinkComInfo {
+            std::string link_name;
+            glm::vec3 world_position = glm::vec3(0.0f);
+        };
+
+        struct SceneDrawStyle {
+            bool show_visual_meshes    = true;
+            bool show_collision_bodies = false;
+            bool wireframe_visuals     = false;
+            std::string hovered_link;
+            std::string selected_link;
+        };
+
+        struct JointDetailInfo {
+            std::string name;
+            std::string parent_link;
+            std::string child_link;
+            std::string type;
+            glm::vec3 axis_local = glm::vec3(0.0f, 0.0f, 1.0f);
+            float position       = 0.0f;
+            float lower_limit    = 0.0f;
+            float upper_limit    = 0.0f;
+            float velocity_limit = -1.0f;  // < 0 means not specified in URDF
+            bool revolute        = false;
+            bool has_limits      = false;
+        };
+
         RobotScene();
         ~RobotScene();
 
         bool loadURDF(const std::string& urdf_path);
 
         void updateTransforms();
-        void draw(GLuint shader);
+        void draw(GLuint shader, const SceneDrawStyle& style);
 
         size_t applyJointSamples(const std::vector<SensorJointSample>& samples, bool only_master_arm);
         bool setJointPositionByName(const std::string& joint_name, float new_position);
@@ -79,8 +106,19 @@ namespace omnilink::teleop_viewer {
         std::vector<JointAxisInfo> getJointAxisInfos(bool revolute_only = true) const;
         std::vector<LinkTfInfo> getLinkTfInfos() const;
         std::vector<LinkCollisionProxy> getLinkCollisionProxies() const;
+        std::vector<LinkComInfo> getLinkComWorldPositions() const;
         bool getLinkWorldTransform(const std::string& link_name, glm::mat4* out_world_transform) const;
         bool getLinkParentName(const std::string& link_name, std::string* out_parent_name) const;
+        bool getParentJointNameForLink(const std::string& link_name, std::string* out_joint_name) const;
+        bool getJointDetail(const std::string& joint_name, JointDetailInfo* out) const;
+        enum class LinkPickMode {
+            Fast,      // collision-sphere proxies only (for per-frame hover)
+            Accurate,  // mesh triangles when cache is warm; rebuilds cache on pose change
+        };
+
+        bool pickLinkByRay(const glm::vec3& ray_origin, const glm::vec3& ray_dir, std::string* out_link_name, float* out_hit_t = nullptr,
+                           LinkPickMode mode = LinkPickMode::Fast);
+        const std::string& urdfFilePath() const;
 
         void setFixedBaseMode(bool enabled);
         bool fixedBaseMode() const;
@@ -92,4 +130,4 @@ namespace omnilink::teleop_viewer {
         std::unique_ptr<Impl> impl_;
     };
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

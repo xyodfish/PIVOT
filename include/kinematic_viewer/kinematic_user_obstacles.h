@@ -35,7 +35,7 @@ namespace kinematic_viewer {
 
     void RenderUserObstaclePanel(UserObstacleState* obstacles);
 
-    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const omnilink::teleop_viewer::RobotScene& scene,
+    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const teleop_viewer::RobotScene& scene,
                                                float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result);
 
 }  // namespace kinematic_viewer

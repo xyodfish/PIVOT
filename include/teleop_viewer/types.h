@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace omnilink::teleop_viewer {
+namespace teleop_viewer {
 
     struct SensorJointSample {
         std::string group;
@@ -78,4 +78,4 @@ namespace omnilink::teleop_viewer {
                joint_name.find("virtual") != std::string::npos || joint_name.find("base") != std::string::npos;
     }
 
-}  // namespace omnilink::teleop_viewer
+}  // namespace teleop_viewer

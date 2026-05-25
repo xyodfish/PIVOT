@@ -699,8 +699,10 @@ namespace omnilink::teleop_viewer {
             float baseX   = 0.0f;
             float baseY   = 0.0f;
             float baseYaw = 0.0f;
-            if (scene.getVirtualBasePose2D(&baseX, &baseY, &baseYaw)) {
+            if (!scene.fixedBaseMode() && scene.getVirtualBasePose2D(&baseX, &baseY, &baseYaw)) {
                 virtualBase2DToFloatingBaseQ(baseX, baseY, baseYaw, &q);
+            } else {
+                virtualBase2DToFloatingBaseQ(0.0f, 0.0f, 0.0f, &q);
             }
         }
         return q;
@@ -710,7 +712,11 @@ namespace omnilink::teleop_viewer {
         if (scene == nullptr) {
             return;
         }
+        const bool lockBase = scene->fixedBaseMode();
         for (const auto& kv : fullBodyWbcJointQIndex_) {
+            if (lockBase && IsBaseMotionJointName(kv.first)) {
+                continue;
+            }
             const int idxQ = kv.second;
             if (idxQ < 0 || idxQ >= q.size()) {
                 continue;
@@ -724,7 +730,7 @@ namespace omnilink::teleop_viewer {
             scene->setJointPositionByName(kv.first, value);
         }
 
-        if (fullBodyWbcHasFloatingBase_ && q.size() >= 7) {
+        if (fullBodyWbcHasFloatingBase_ && q.size() >= 7 && !lockBase) {
             float baseX   = 0.0f;
             float baseY   = 0.0f;
             float baseYaw = 0.0f;
@@ -779,7 +785,7 @@ namespace omnilink::teleop_viewer {
     }
 
     flex_ik::Vector IkSolver::limitWbcFullBodyStep(const flex_ik::Vector& qCurrent, const flex_ik::Vector& qSolved, bool fastMode,
-                                                   bool positionOnlyMode) const {
+                                                   bool positionOnlyMode, bool lockFloatingBase) const {
         flex_ik::Vector qOut = qCurrent;
         if (qCurrent.size() != qSolved.size()) {
             return qOut;
@@ -800,7 +806,7 @@ namespace omnilink::teleop_viewer {
             qOut[idxQ]         = current + delta;
         }
 
-        if (fullBodyWbcHasFloatingBase_ && qCurrent.size() >= 7 && qSolved.size() >= 7) {
+        if (!lockFloatingBase && fullBodyWbcHasFloatingBase_ && qCurrent.size() >= 7 && qSolved.size() >= 7) {
             // Allow larger chassis steps on drag-end solve; realtime drag stays conservative.
             const double basePosDelta = fastMode ? 0.08 : 0.20;
             const double baseYawDelta = fastMode ? 0.12 : 0.30;
@@ -931,12 +937,14 @@ namespace omnilink::teleop_viewer {
                 return false;
             }
 
-            // Realtime drag: apply solver output directly (internal dq limits already cap per-iter motion).
-            if (fastMode) {
-                applyWbcFullBodyQToScene(scene, wbcResult.solution);
-            } else {
-                applyWbcFullBodyQToScene(scene, limitWbcFullBodyStep(qCurrent, wbcResult.solution, false, positionOnlyMode));
+            const bool lockFloatingBase = scene->fixedBaseMode();
+            flex_ik::Vector qApply =
+                fastMode ? wbcResult.solution : limitWbcFullBodyStep(qCurrent, wbcResult.solution, false, positionOnlyMode, lockFloatingBase);
+            if (lockFloatingBase && fullBodyWbcHasFloatingBase_ && qApply.size() >= 7) {
+                virtualBase2DToFloatingBaseQ(0.0f, 0.0f, 0.0f, &qApply);
             }
+            // Realtime drag: apply solver output directly (internal dq limits already cap per-iter motion).
+            applyWbcFullBodyQToScene(scene, qApply);
 
             if (!wbcResult.success && !fastMode && activeChainIndex >= 0 && activeChainIndex < chainCount()) {
                 glm::vec3 tipPos(0.0f);

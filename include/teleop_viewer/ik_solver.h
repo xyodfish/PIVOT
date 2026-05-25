@@ -98,7 +98,7 @@ namespace omnilink::teleop_viewer {
         flex_ik::Vector limitFullBodyStep(const flex_ik::Vector& qCurrent, const flex_ik::Vector& qSolved, bool fastMode,
                                           bool positionOnlyMode) const;
         flex_ik::Vector limitWbcFullBodyStep(const flex_ik::Vector& qCurrent, const flex_ik::Vector& qSolved, bool fastMode,
-                                             bool positionOnlyMode) const;
+                                             bool positionOnlyMode, bool lockFloatingBase) const;
 
         std::vector<IkChainRuntime> chains_;
         std::unique_ptr<flex_ik::FlexIk> fullBodySolverPose_;

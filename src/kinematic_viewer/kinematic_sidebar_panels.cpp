@@ -17,7 +17,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace kinematic_viewer {
@@ -28,68 +27,6 @@ namespace kinematic_viewer {
         bool IsTrajectoryFileExt(const std::filesystem::path& path) {
             const std::string ext = LowerFileExtension(path.string());
             return ext == ".csv";
-        }
-
-        bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
-                                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                          std::string* errorMessage) {
-            std::unordered_set<std::string> sceneJointNames;
-            for (const auto& joint : joints) {
-                sceneJointNames.insert(joint.name);
-            }
-
-            std::unordered_set<std::string> trajectoryJointNames;
-            for (const auto& keyframe : playbackState.keyframes) {
-                for (const auto& [jointName, _] : keyframe.joints) {
-                    trajectoryJointNames.insert(jointName);
-                }
-            }
-
-            if (trajectoryJointNames.empty()) {
-                if (errorMessage != nullptr) {
-                    *errorMessage = "轨迹文件中未找到任何关节名";
-                }
-                return false;
-            }
-
-            std::vector<std::string> unknown;
-            int matchedCount = 0;
-            for (const auto& jointName : trajectoryJointNames) {
-                if (sceneJointNames.find(jointName) == sceneJointNames.end()) {
-                    unknown.push_back(jointName);
-                } else {
-                    ++matchedCount;
-                }
-            }
-
-            if (!unknown.empty()) {
-                std::sort(unknown.begin(), unknown.end());
-                std::stringstream ss;
-                ss << "轨迹关节名与当前机器人不匹配，未知关节 " << unknown.size() << " 个: ";
-                const size_t showCount = std::min<size_t>(unknown.size(), 8);
-                for (size_t i = 0; i < showCount; ++i) {
-                    if (i > 0) {
-                        ss << ", ";
-                    }
-                    ss << unknown[i];
-                }
-                if (unknown.size() > showCount) {
-                    ss << " ...";
-                }
-                if (errorMessage != nullptr) {
-                    *errorMessage = ss.str();
-                }
-                return false;
-            }
-
-            if (matchedCount <= 0) {
-                if (errorMessage != nullptr) {
-                    *errorMessage = "轨迹关节名与当前机器人无任何匹配";
-                }
-                return false;
-            }
-
-            return true;
         }
 
         std::string TrimCopy(const std::string& text) {
@@ -285,26 +222,47 @@ namespace kinematic_viewer {
                 return;
             }
 
+            struct DirEntry {
+                std::filesystem::path path;
+                std::string name;
+                std::string size;
+                std::string mtime;
+                bool isDir = false;
+            };
+
             // Persistent sort state for this browser instance
             static FileBrowserSortBy s_sort_by = FileBrowserSortBy::NameAsc;
+            static std::string s_cached_dir;
+            static std::vector<DirEntry> s_cached_entries;
+            static bool s_force_refresh = false;
+            static bool s_has_scan_error = false;
 
             if (ImGui::Button("浏览本地文件")) {
                 const std::string defaultDir = NormalizePath(std::filesystem::current_path().string());
                 std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s",
                               defaultDir.c_str());
+                s_force_refresh = true;
                 ImGui::OpenPopup("trajectory_file_browser_popup");
             }
 
-            if (!ImGui::BeginPopupModal("trajectory_file_browser_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            const float popup_width = std::clamp(viewport->Size.x * 0.72f, 900.0f, 1500.0f);
+            const float popup_height = std::clamp(viewport->Size.y * 0.70f, 460.0f, 920.0f);
+            ImGui::SetNextWindowSize(ImVec2(popup_width, popup_height), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(860.0f, 440.0f), ImVec2(1800.0f, 1200.0f));
+
+            if (!ImGui::BeginPopupModal("trajectory_file_browser_popup", nullptr)) {
                 return;
             }
 
+            bool dirChanged = false;
             ImGui::InputText("目录", playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir));
             ImGui::SameLine();
             if (ImGui::Button("进入目录")) {
                 const std::string normalized = NormalizePath(playbackState->trajectory_browser_dir);
                 std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s",
                               normalized.c_str());
+                dirChanged = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("上一级")) {
@@ -315,33 +273,43 @@ namespace kinematic_viewer {
                 }
                 std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s",
                               parent.string().c_str());
+                dirChanged = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("根目录/")) {
                 std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s", "/");
+                dirChanged = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("HOME")) {
                 const char* home = std::getenv("HOME");
                 if (home != nullptr && home[0] != '\0') {
                     std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s", home);
+                    dirChanged = true;
                 }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("刷新")) {
+                s_force_refresh = true;
             }
             ImGui::TextDisabled("支持输入任意绝对路径，例如 /home/user/data");
 
-            std::error_code ec;
-            const std::filesystem::path browsePath(playbackState->trajectory_browser_dir);
-            if (!std::filesystem::exists(browsePath, ec) || !std::filesystem::is_directory(browsePath, ec)) {
-                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "目录不可用");
-            } else {
-                struct DirEntry {
-                    std::filesystem::path path;
-                    std::string name;
-                    std::string size;
-                    std::string mtime;
-                    bool isDir = false;
-                };
-                std::vector<DirEntry> entries;
+            const std::string normalizedDir = NormalizePath(playbackState->trajectory_browser_dir);
+            if (dirChanged) {
+                s_force_refresh = true;
+            }
+
+            auto refreshBrowserCache = [&](const std::string& dir) {
+                s_cached_dir = dir;
+                s_cached_entries.clear();
+                s_has_scan_error = false;
+
+                std::error_code ec;
+                const std::filesystem::path browsePath(dir);
+                if (!std::filesystem::exists(browsePath, ec) || !std::filesystem::is_directory(browsePath, ec)) {
+                    s_has_scan_error = true;
+                    return;
+                }
 
                 for (auto it = std::filesystem::directory_iterator(browsePath, ec); !ec && it != std::filesystem::directory_iterator();
                      ++it) {
@@ -361,46 +329,54 @@ namespace kinematic_viewer {
                         auto ftime  = it->last_write_time(ec);
                         entry.mtime = ec ? "-" : FormatFileTime(ftime);
                     }
-                    entries.push_back(std::move(entry));
-                }
-                {
-                    const FileBrowserSortBy sort_by = s_sort_by;
-                    std::sort(entries.begin(), entries.end(), [sort_by](const DirEntry& a, const DirEntry& b) {
-                        if (a.isDir != b.isDir) {
-                            return a.isDir > b.isDir;
-                        }
-                        switch (sort_by) {
-                            case FileBrowserSortBy::SizeAsc:
-                                if (a.size != b.size) {
-                                    return a.size < b.size;
-                                }
-                                break;
-                            case FileBrowserSortBy::SizeDesc:
-                                if (a.size != b.size) {
-                                    return a.size > b.size;
-                                }
-                                break;
-                            case FileBrowserSortBy::TimeAsc:
-                                if (a.mtime != b.mtime) {
-                                    return a.mtime < b.mtime;
-                                }
-                                break;
-                            case FileBrowserSortBy::TimeDesc:
-                                if (a.mtime != b.mtime) {
-                                    return a.mtime > b.mtime;
-                                }
-                                break;
-                            case FileBrowserSortBy::NameDesc:
-                                return a.name > b.name;
-                            case FileBrowserSortBy::NameAsc:
-                            default:
-                                break;
-                        }
-                        return a.name < b.name;
-                    });
+                    s_cached_entries.push_back(std::move(entry));
                 }
 
-                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(720, 320), true)) {
+                const FileBrowserSortBy sort_by = s_sort_by;
+                std::sort(s_cached_entries.begin(), s_cached_entries.end(), [sort_by](const DirEntry& a, const DirEntry& b) {
+                    if (a.isDir != b.isDir) {
+                        return a.isDir > b.isDir;
+                    }
+                    switch (sort_by) {
+                        case FileBrowserSortBy::SizeAsc:
+                            if (a.size != b.size) {
+                                return a.size < b.size;
+                            }
+                            break;
+                        case FileBrowserSortBy::SizeDesc:
+                            if (a.size != b.size) {
+                                return a.size > b.size;
+                            }
+                            break;
+                        case FileBrowserSortBy::TimeAsc:
+                            if (a.mtime != b.mtime) {
+                                return a.mtime < b.mtime;
+                            }
+                            break;
+                        case FileBrowserSortBy::TimeDesc:
+                            if (a.mtime != b.mtime) {
+                                return a.mtime > b.mtime;
+                            }
+                            break;
+                        case FileBrowserSortBy::NameDesc:
+                            return a.name > b.name;
+                        case FileBrowserSortBy::NameAsc:
+                        default:
+                            break;
+                    }
+                    return a.name < b.name;
+                });
+            };
+
+            if (s_force_refresh || s_cached_dir != normalizedDir) {
+                s_force_refresh = false;
+                refreshBrowserCache(normalizedDir);
+            }
+
+            if (s_has_scan_error) {
+                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "目录不可用");
+            } else {
+                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(0, -38), true)) {
                     ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
                     if (ImGui::BeginTable("file_browser_table", 3, tableFlags)) {
                         ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch, 3.5f);
@@ -428,10 +404,11 @@ namespace kinematic_viewer {
                                 } else {
                                     s_sort_by = asc[col];
                                 }
+                                s_force_refresh = true;
                             }
                         }
 
-                        for (const auto& entry : entries) {
+                        for (const auto& entry : s_cached_entries) {
                             ImGui::TableNextRow();
 
                             ImGui::TableSetColumnIndex(0);
@@ -452,6 +429,8 @@ namespace kinematic_viewer {
                                     playbackState->selected_trajectory_index = static_cast<int>(playbackState->trajectory_files.size()) - 1;
                                     std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s",
                                                   entry.path.string().c_str());
+                                    playbackState->pending_trajectory_load_index      = playbackState->selected_trajectory_index;
+                                    playbackState->pending_trajectory_play_after_load = false;
                                     ImGui::CloseCurrentPopup();
                                 }
                             }
@@ -764,55 +743,29 @@ namespace kinematic_viewer {
         ImGui::Separator();
         ImGui::TextUnformatted("轨迹关键帧回放");
 
-        auto LoadSelectedTrajectory = [&](int index) {
-            if (index < 0 || index >= static_cast<int>(playbackState->trajectory_files.size())) {
-                return;
-            }
-            const std::string& path = playbackState->trajectory_files[index].path;
-            std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s", path.c_str());
-            const DebugPlaybackState previousState = *playbackState;
-            std::string ioError;
-            if (LoadTrajectoryFromFile(path, playbackState, &ioError)) {
-                std::string checkError;
-                if (!kinematic_sidebar_panels_internal::ValidateTrajectoryJointNames(*playbackState, joints, &checkError)) {
-                    *playbackState                                = previousState;
-                    playbackState->trajectory_files[index].status = "加载失败: " + checkError;
-                    playbackState->trajectory_files[index].loaded = false;
-                    playbackState->trajectory_io_status           = "加载失败: " + checkError;
-                    playbackState->trajectory_alert_message       = "该轨迹与当前机器人关节定义不匹配。";
-                    playbackState->trajectory_alert_detail        = checkError;
-                    playbackState->trajectory_alert_popup_pending = true;
-                } else {
-                    playbackState->trajectory_files[index].status = "加载成功";
-                    playbackState->trajectory_files[index].loaded = true;
-                    playbackPlayer->SampleAtCurrentTime(*playbackState, scene);
-                    playbackState->trajectory_io_status = "加载成功: " + path;
-                }
-            } else {
-                playbackState->trajectory_files[index].status = "加载失败: " + ioError;
-                playbackState->trajectory_files[index].loaded = false;
-                playbackState->trajectory_io_status           = "加载失败: " + ioError;
-                playbackState->trajectory_alert_message       = "轨迹文件加载失败，请检查路径或文件格式。";
-                playbackState->trajectory_alert_detail        = ioError;
-                playbackState->trajectory_alert_popup_pending = true;
-            }
-        };
-
         if (ImGui::CollapsingHeader("文件", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ProcessPendingTrajectoryLoad(playbackState, joints, playbackPlayer, scene, playback_sm);
             SidebarDragFloat("关键帧间隔", &playbackState->keyframe_interval_sec, 0.02f, 0.02f, 5.0f, "%.2f");
 
+            ImGui::TextDisabled("单击选中并自动加载；双击播放；勾选多项后点连播");
             // Trajectory file list
             if (!playbackState->trajectory_files.empty()) {
                 ImGui::TextUnformatted("轨迹文件列表:");
-                if (ImGui::BeginListBox("##trajectory_file_list", ImVec2(-1, 120))) {
+                if (ImGui::BeginListBox("##trajectory_file_list", ImVec2(-1, 140))) {
                     for (int i = 0; i < static_cast<int>(playbackState->trajectory_files.size()); ++i) {
-                        const auto& entry = playbackState->trajectory_files[i];
+                        auto& entry = playbackState->trajectory_files[static_cast<size_t>(i)];
                         std::filesystem::path p(entry.path);
                         std::string label = p.filename().string();
                         if (!entry.status.empty() && entry.status != "未加载") {
                             label += " (" + entry.status + ")";
                         }
-                        bool isSelected  = (playbackState->selected_trajectory_index == i);
+                        const bool isSelected = (playbackState->selected_trajectory_index == i);
+
+                        char queueId[32];
+                        std::snprintf(queueId, sizeof(queueId), "##queue_%d", i);
+                        ImGui::Checkbox(queueId, &entry.queued);
+                        ImGui::SameLine();
+
                         ImVec4 textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
                         if (entry.loaded) {
                             textColor = ImVec4(0.40f, 0.84f, 0.52f, 1.0f);
@@ -820,12 +773,27 @@ namespace kinematic_viewer {
                             textColor = ImVec4(0.95f, 0.42f, 0.42f, 1.0f);
                         }
                         ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-                        if (ImGui::Selectable(label.c_str(), isSelected)) {
+                        const bool clicked =
+                            ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick);
+                        const bool doubleClicked =
+                            ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+                        if (clicked || doubleClicked) {
                             playbackState->selected_trajectory_index = i;
+                            if (ImGui::GetIO().KeyCtrl) {
+                                entry.queued = !entry.queued;
+                            } else if (doubleClicked) {
+                                if (LoadTrajectoryListEntry(playbackState, i, joints, playbackPlayer, scene)) {
+                                    CancelTrajectorySequence(playbackState);
+                                    playbackState->play_time = 0.0f;
+                                    playback_sm->Play();
+                                }
+                            } else {
+                                LoadTrajectoryListEntry(playbackState, i, joints, playbackPlayer, scene);
+                            }
                         }
                         ImGui::PopStyleColor();
                         if (ImGui::IsItemHovered() && !entry.path.empty()) {
-                            ImGui::SetTooltip("%s", entry.path.c_str());
+                            ImGui::SetTooltip("%s\n单击加载 | 双击播放 | Ctrl+单击切换连播勾选", entry.path.c_str());
                         }
                     }
                     ImGui::EndListBox();
@@ -844,11 +812,20 @@ namespace kinematic_viewer {
                 }
             }
             ImGui::SameLine();
-            if (ImGui::Button("加载选中") && playbackState->selected_trajectory_index >= 0) {
-                LoadSelectedTrajectory(playbackState->selected_trajectory_index);
+            int queuedCount = 0;
+            for (const auto& entry : playbackState->trajectory_files) {
+                if (entry.queued) {
+                    ++queuedCount;
+                }
+            }
+            char sequenceLabel[48];
+            std::snprintf(sequenceLabel, sizeof(sequenceLabel), "连播选中 (%d)", queuedCount);
+            if (ImGui::Button(sequenceLabel) && queuedCount > 0) {
+                StartTrajectorySequence(playbackState, joints, playbackPlayer, scene, playback_sm);
             }
             ImGui::SameLine();
             if (ImGui::Button("清空列表")) {
+                CancelTrajectorySequence(playbackState);
                 playbackState->trajectory_files.clear();
                 playbackState->selected_trajectory_index = -1;
             }
@@ -856,9 +833,10 @@ namespace kinematic_viewer {
             ImGui::InputText("轨迹文件", playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path));
             ImGui::SameLine();
             kinematic_sidebar_panels_internal::RenderTrajectoryFileBrowser(playbackState);
+            ProcessPendingTrajectoryLoad(playbackState, joints, playbackPlayer, scene, playback_sm);
 
-            if (ImGui::Button("加载轨迹文件")) {
-                LoadSelectedTrajectory(playbackState->selected_trajectory_index);
+            if (ImGui::Button("重新加载") && playbackState->selected_trajectory_index >= 0) {
+                LoadTrajectoryListEntry(playbackState, playbackState->selected_trajectory_index, joints, playbackPlayer, scene);
             }
             ImGui::SameLine();
             if (ImGui::Button("保存当前轨迹")) {
@@ -897,12 +875,36 @@ namespace kinematic_viewer {
                 playbackPlayer->RecordKeyframe(playbackState, joints, *scene);
             }
             ImGui::SameLine();
-            const bool playing = playback_sm->IsPlaying();
-            if (ImGui::Button(playing ? "暂停回放" : "开始回放")) {
-                playback_sm->TogglePlayPause();
+            const bool hasKeyframes = !playbackState->keyframes.empty();
+            const bool playing      = playback_sm->IsPlaying();
+            if (!hasKeyframes) {
+                ImGui::BeginDisabled();
+            }
+            if (playing) {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::Button("播放")) {
+                playback_sm->Play();
+            }
+            if (playing) {
+                ImGui::EndDisabled();
+            }
+            ImGui::SameLine();
+            if (!playing) {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::Button("暂停")) {
+                playback_sm->Pause();
+            }
+            if (!playing) {
+                ImGui::EndDisabled();
+            }
+            if (!hasKeyframes) {
+                ImGui::EndDisabled();
             }
             ImGui::SameLine();
             if (ImGui::Button("停止")) {
+                CancelTrajectorySequence(playbackState);
                 playback_sm->Stop();
             }
             ImGui::SameLine();

@@ -4,10 +4,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace kinematic_viewer {
@@ -711,6 +713,208 @@ namespace kinematic_viewer {
         }
 
         playbackState->selected_keyframe_index = 0;
+    }
+
+    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
+                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, std::string* errorMessage) {
+        std::unordered_set<std::string> sceneJointNames;
+        for (const auto& joint : joints) {
+            sceneJointNames.insert(joint.name);
+        }
+
+        std::unordered_set<std::string> trajectoryJointNames;
+        for (const auto& keyframe : playbackState.keyframes) {
+            for (const auto& [jointName, _] : keyframe.joints) {
+                trajectoryJointNames.insert(jointName);
+            }
+        }
+
+        if (trajectoryJointNames.empty()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = "轨迹文件中未找到任何关节名";
+            }
+            return false;
+        }
+
+        std::vector<std::string> unknown;
+        int matchedCount = 0;
+        for (const auto& jointName : trajectoryJointNames) {
+            if (sceneJointNames.find(jointName) == sceneJointNames.end()) {
+                unknown.push_back(jointName);
+            } else {
+                ++matchedCount;
+            }
+        }
+
+        if (!unknown.empty()) {
+            std::sort(unknown.begin(), unknown.end());
+            std::stringstream ss;
+            ss << "轨迹关节名与当前机器人不匹配，未知关节 " << unknown.size() << " 个: ";
+            const size_t showCount = std::min<size_t>(unknown.size(), 8);
+            for (size_t i = 0; i < showCount; ++i) {
+                if (i > 0) {
+                    ss << ", ";
+                }
+                ss << unknown[i];
+            }
+            if (unknown.size() > showCount) {
+                ss << " ...";
+            }
+            if (errorMessage != nullptr) {
+                *errorMessage = ss.str();
+            }
+            return false;
+        }
+
+        if (matchedCount <= 0) {
+            if (errorMessage != nullptr) {
+                *errorMessage = "轨迹关节名与当前机器人无任何匹配";
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
+                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                 teleop_viewer::RobotScene* scene) {
+        if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || index < 0 ||
+            index >= static_cast<int>(playbackState->trajectory_files.size())) {
+            return false;
+        }
+
+        const std::string& path = playbackState->trajectory_files[static_cast<size_t>(index)].path;
+        std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s", path.c_str());
+        playbackState->selected_trajectory_index = index;
+
+        const DebugPlaybackState previousState = *playbackState;
+        std::string ioError;
+        if (!LoadTrajectoryFromFile(path, playbackState, &ioError)) {
+            *playbackState                                                     = previousState;
+            playbackState->trajectory_files[static_cast<size_t>(index)].status = "加载失败: " + ioError;
+            playbackState->trajectory_files[static_cast<size_t>(index)].loaded = false;
+            playbackState->trajectory_io_status                                = "加载失败: " + ioError;
+            playbackState->trajectory_alert_message                            = "轨迹文件加载失败，请检查路径或文件格式。";
+            playbackState->trajectory_alert_detail                             = ioError;
+            playbackState->trajectory_alert_popup_pending                      = true;
+            return false;
+        }
+
+        std::string checkError;
+        if (!ValidateTrajectoryJointNames(*playbackState, joints, &checkError)) {
+            *playbackState                                                     = previousState;
+            playbackState->trajectory_files[static_cast<size_t>(index)].status = "加载失败: " + checkError;
+            playbackState->trajectory_files[static_cast<size_t>(index)].loaded = false;
+            playbackState->trajectory_io_status                                = "加载失败: " + checkError;
+            playbackState->trajectory_alert_message                            = "该轨迹与当前机器人关节定义不匹配。";
+            playbackState->trajectory_alert_detail                             = checkError;
+            playbackState->trajectory_alert_popup_pending                      = true;
+            return false;
+        }
+
+        playbackState->trajectory_files[static_cast<size_t>(index)].status = "加载成功";
+        playbackState->trajectory_files[static_cast<size_t>(index)].loaded = true;
+        playbackPlayer->SampleAtCurrentTime(*playbackState, scene);
+        playbackState->trajectory_io_status = "加载成功: " + path;
+        return true;
+    }
+
+    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState,
+                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                      teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
+        if (playbackState == nullptr || playbackState->pending_trajectory_load_index < 0) {
+            return;
+        }
+
+        const int index = playbackState->pending_trajectory_load_index;
+        const bool play = playbackState->pending_trajectory_play_after_load;
+        playbackState->pending_trajectory_load_index      = -1;
+        playbackState->pending_trajectory_play_after_load = false;
+
+        if (!LoadTrajectoryListEntry(playbackState, index, joints, playbackPlayer, scene)) {
+            return;
+        }
+
+        if (play && playback_sm != nullptr) {
+            CancelTrajectorySequence(playbackState);
+            playbackState->play_time = 0.0f;
+            playback_sm->Play();
+        }
+    }
+
+    void CancelTrajectorySequence(DebugPlaybackState* playbackState) {
+        if (playbackState == nullptr || !playbackState->trajectory_sequence_active) {
+            return;
+        }
+        playbackState->trajectory_sequence_active = false;
+        playbackState->trajectory_sequence_indices.clear();
+        playbackState->trajectory_sequence_position = 0;
+        playbackState->loop                           = playbackState->trajectory_sequence_saved_loop;
+    }
+
+    void StartTrajectorySequence(DebugPlaybackState* playbackState,
+                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                 teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
+        if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || playback_sm == nullptr) {
+            return;
+        }
+
+        playbackState->trajectory_sequence_indices.clear();
+        for (int i = 0; i < static_cast<int>(playbackState->trajectory_files.size()); ++i) {
+            if (playbackState->trajectory_files[static_cast<size_t>(i)].queued) {
+                playbackState->trajectory_sequence_indices.push_back(i);
+            }
+        }
+        if (playbackState->trajectory_sequence_indices.empty()) {
+            playbackState->trajectory_io_status = "连播: 请先勾选要播放的轨迹";
+            return;
+        }
+
+        playbackState->trajectory_sequence_active       = true;
+        playbackState->trajectory_sequence_position     = 0;
+        playbackState->trajectory_sequence_saved_loop   = playbackState->loop;
+        playbackState->loop                             = false;
+        playbackState->trajectory_io_status             = "连播: 开始 (" + std::to_string(playbackState->trajectory_sequence_indices.size()) + " 个文件)";
+
+        while (playbackState->trajectory_sequence_position < playbackState->trajectory_sequence_indices.size()) {
+            const int index = playbackState->trajectory_sequence_indices[playbackState->trajectory_sequence_position];
+            if (LoadTrajectoryListEntry(playbackState, index, joints, playbackPlayer, scene)) {
+                playbackState->play_time = 0.0f;
+                playback_sm->Play();
+                return;
+            }
+            ++playbackState->trajectory_sequence_position;
+        }
+
+        CancelTrajectorySequence(playbackState);
+        playbackState->trajectory_io_status = "连播: 所选轨迹均无法加载";
+    }
+
+    void TickTrajectorySequence(DebugPlaybackState* playbackState, PlaybackStateMachine* playback_sm, bool was_playing_last_frame,
+                                const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                teleop_viewer::RobotScene* scene) {
+        if (playbackState == nullptr || playback_sm == nullptr || playbackPlayer == nullptr || scene == nullptr ||
+            !playbackState->trajectory_sequence_active || !was_playing_last_frame || playback_sm->IsPlaying() || playback_sm->IsPaused()) {
+            return;
+        }
+
+        ++playbackState->trajectory_sequence_position;
+        while (playbackState->trajectory_sequence_position < playbackState->trajectory_sequence_indices.size()) {
+            const int index = playbackState->trajectory_sequence_indices[playbackState->trajectory_sequence_position];
+            if (LoadTrajectoryListEntry(playbackState, index, joints, playbackPlayer, scene)) {
+                playbackState->play_time = 0.0f;
+                playback_sm->Play();
+                const size_t current = playbackState->trajectory_sequence_position + 1;
+                const size_t total   = playbackState->trajectory_sequence_indices.size();
+                playbackState->trajectory_io_status = "连播: " + std::to_string(current) + "/" + std::to_string(total);
+                return;
+            }
+            ++playbackState->trajectory_sequence_position;
+        }
+
+        CancelTrajectorySequence(playbackState);
+        playbackState->trajectory_io_status = "连播: 完成";
     }
 
 }  // namespace kinematic_viewer

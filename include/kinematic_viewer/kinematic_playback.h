@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
 #include "teleop_viewer/scene.h"
 
@@ -48,5 +49,21 @@ namespace kinematic_viewer {
     void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState,
                                             const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
                                             const teleop_viewer::RobotScene& scene);
+
+    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
+                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, std::string* errorMessage);
+    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
+                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                 teleop_viewer::RobotScene* scene);
+    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState,
+                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                      teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm);
+    void StartTrajectorySequence(DebugPlaybackState* playbackState,
+                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                 teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm);
+    void TickTrajectorySequence(DebugPlaybackState* playbackState, PlaybackStateMachine* playback_sm, bool was_playing_last_frame,
+                                const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                teleop_viewer::RobotScene* scene);
+    void CancelTrajectorySequence(DebugPlaybackState* playbackState);
 
 }  // namespace kinematic_viewer

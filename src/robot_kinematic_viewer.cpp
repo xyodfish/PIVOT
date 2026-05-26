@@ -437,11 +437,11 @@ int main(int argc, char** argv) {
         input_ctx.shift_key_down =
             glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
 
+        const bool was_playback_playing = playback_sm.IsPlaying();
         playback_sm.AdvanceTime(static_cast<float>(dt_sec));
         if (playback_sm.IsPlaying()) {
             trajectory_player.SampleAtCurrentTime(playback_state, &scene);
         }
-
         scene.setFixedBaseMode(ui_state.lock_base);
         scene.updateTransforms();
         CollisionMonitorResult collision_result = collision_monitor.Evaluate(collision_state, scene);
@@ -873,6 +873,8 @@ int main(int argc, char** argv) {
         }
 
         auto joints = scene.getJointInfos();
+        kinematic_viewer::TickTrajectorySequence(&playback_state, &playback_sm, was_playback_playing, joints, &trajectory_player,
+                                                   &scene);
         if (ui_state.sidebar_page == 4) {
             RenderJointPanel(&ui_state, &scene, joints);
         }

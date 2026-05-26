@@ -19,6 +19,7 @@ namespace kinematic_viewer {
         std::string path;
         std::string status;  // "未加载" / "加载成功" / "加载失败: ..."
         bool loaded = false;
+        bool queued   = false;  // 勾选后参与连播
     };
 
     struct DebugPlaybackState {
@@ -47,6 +48,16 @@ namespace kinematic_viewer {
         // Multi-trajectory file sequence
         std::vector<TrajectoryFileEntry> trajectory_files;
         int selected_trajectory_index = -1;
+
+        // Deferred load (e.g. after file browser picks a file)
+        int pending_trajectory_load_index   = -1;
+        bool pending_trajectory_play_after_load = false;
+
+        // Sequential playback of queued trajectory files
+        bool trajectory_sequence_active   = false;
+        std::vector<int> trajectory_sequence_indices;
+        size_t trajectory_sequence_position = 0;
+        bool trajectory_sequence_saved_loop = true;
     };
 
 }  // namespace kinematic_viewer

@@ -12,8 +12,12 @@
 #include <vector>
 
 namespace kinematic_viewer {
+    class KinematicIkController;
+    class KinematicRosBridge;
 
     void RenderScenePanel(ViewerState* uiState);
+    void RenderIkPanel(IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
+                       teleop_viewer::RobotScene* scene);
     void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
                                   teleop_viewer::OrbitCamera* camera, const CollisionMonitorState* collisionState,
                                   const CollisionMonitorResult* collisionResult, DebugPlaybackState* playbackState,

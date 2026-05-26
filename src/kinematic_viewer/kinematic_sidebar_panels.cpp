@@ -1,7 +1,10 @@
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
 
+#include "kinematic_viewer/kinematic_ik_controller.h"
+#include "kinematic_viewer/kinematic_marker_utils.h"
 #include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
+#include "kinematic_viewer/kinematic_ros_bridge.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
 
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
@@ -486,6 +489,239 @@ namespace kinematic_viewer {
         }
         ImGui::Separator();
         RenderUserObstaclePanel(&uiState->user_obstacles);
+    }
+
+    void RenderIkPanel(IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
+                       teleop_viewer::RobotScene* scene) {
+        if (ikState == nullptr || ikController == nullptr || rosBridge == nullptr || scene == nullptr) {
+            return;
+        }
+        if (ikState->chains.empty()) {
+            ImGui::TextDisabled("无 IK 链配置");
+            return;
+        }
+        if (!ImGui::CollapsingHeader("末端 Marker IK", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+
+        std::vector<const char*> chain_labels;
+        chain_labels.reserve(ikState->chains.size());
+        for (const auto& c : ikState->chains) {
+            chain_labels.push_back(c.config.label.c_str());
+        }
+        if (kinematic_viewer::SidebarCombo("控制链", &ikState->selected_chain, chain_labels.data(),
+                                           static_cast<int>(chain_labels.size()))) {
+            ikState->marker_initialized = false;
+            ikController->LoadActiveMarkerFromTarget(scene);
+        }
+        int solve_mode_index           = (ikState->solve_mode == "full_body") ? 1 : 0;
+        const char* solve_mode_items[] = {"单链", "全身"};
+        if (kinematic_viewer::SidebarCombo("求解模式", &solve_mode_index, solve_mode_items, IM_ARRAYSIZE(solve_mode_items))) {
+            ikState->solve_mode  = (solve_mode_index == 1) ? "full_body" : "single_chain";
+            ikState->last_status = "已切换IK求解模式";
+        }
+        if (ikState->solve_mode == "full_body") {
+            int backend_index           = (ikState->full_body_backend == "wbc_chain_ik") ? 1 : 0;
+            const char* backend_items[] = {"flex_ik", "wbc_chain_ik"};
+            if (kinematic_viewer::SidebarCombo("全身后端", &backend_index, backend_items, IM_ARRAYSIZE(backend_items))) {
+                ikState->full_body_backend = (backend_index == 1) ? "wbc_chain_ik" : "flex_ik";
+                ikState->solver.setFullBodyBackend(ikState->full_body_backend);
+                ikState->last_status = std::string("已切换全身IK后端: ") + ikState->full_body_backend;
+            }
+            kinematic_viewer::PushSidebarHalfWidth();
+            ImGui::DragInt("迭代", &ikState->full_body_iterations, 1.0f, 1, 30);
+            kinematic_viewer::PopSidebarWidth();
+            ikState->full_body_iterations = std::max(1, ikState->full_body_iterations);
+            ImGui::TextDisabled("彩色目标轴: 亮色=当前控制链，淡色=其他链");
+        }
+        ImGui::Checkbox("使用RViz目标位姿", &ikState->use_external_target);
+        ImGui::TextDisabled("外部位姿topic: %s", ikState->external_target_topic.c_str());
+        if (!ikState->external_target_expected_frame.empty()) {
+            ImGui::TextDisabled("外部位姿frame过滤: %s", ikState->external_target_expected_frame.c_str());
+        } else {
+            ImGui::TextDisabled("外部位姿frame过滤: <未设置>");
+        }
+        if (!rosBridge->enabled()) {
+            ImGui::TextDisabled("外部位姿: ROS 未启用");
+        } else if (ikState->external_target_received) {
+            double now_ros_sec = rosBridge->nowSec();
+            double age_sec     = std::max(0.0, now_ros_sec - ikState->external_target_last_recv_sec);
+            ImGui::Text("外部位姿: 已接收, frame=%s, %.2fs前",
+                        ikState->external_target_last_frame.empty() ? "<empty>" : ikState->external_target_last_frame.c_str(), age_sec);
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "外部位姿: 未接收到消息");
+        }
+
+        const auto& chain_status = ikState->chains[ikState->selected_chain];
+        if (ikState->solve_mode == "single_chain" && !chain_status.ready) {
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "IK链不可用: %s", chain_status.error.c_str());
+            return;
+        }
+        if (!ikState->marker_initialized) {
+            ikController->LoadActiveMarkerFromTarget(scene);
+        }
+        if (ImGui::CollapsingHeader("Gizmo与拖动")) {
+            kinematic_viewer::SidebarCheckboxRow2("锁姿态", &ikState->lock_orientation, "拖动实时IK", &ikState->realtime_ik_during_drag);
+            kinematic_viewer::SidebarRadioRow3("模式", &ikState->gizmo_operation, "平移", "旋转", "全");
+            ImGui::TextUnformatted("坐标系");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("W", ikState->gizmo_world_mode)) {
+                ikState->gizmo_world_mode = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("L", !ikState->gizmo_world_mode)) {
+                ikState->gizmo_world_mode = false;
+            }
+            kinematic_viewer::SidebarSliderFloat("Gizmo尺寸", &ikState->gizmo_size_clip_space, 0.10f, 0.40f, "%.2f");
+            if (ikState->realtime_ik_during_drag) {
+                kinematic_viewer::SidebarSliderFloat("IK Hz", &ikState->realtime_ik_hz, 5.0f, 120.0f, "%.0f");
+                if (ikState->solve_mode == "full_body") {
+                    ImGui::TextDisabled("full_body 拖动时频率自动上限：平移12Hz，姿态4Hz");
+                    ImGui::TextDisabled("full_body 平移拖动走位置优先，旋转拖动走姿态求解");
+                }
+            }
+            if (ikState->solve_mode == "full_body") {
+                ImGui::Checkbox("松手后末端精修(single_chain)", &ikState->refine_single_chain_on_drag_end);
+                if (ikState->refine_single_chain_on_drag_end) {
+                    ImGui::Checkbox("仅旋转拖动时触发精修", &ikState->refine_only_when_rotation);
+                }
+            }
+        }
+
+        if (ImGui::CollapsingHeader("吸附与增益")) {
+            kinematic_viewer::SidebarCheckboxRow2("平移吸附", &ikState->translate_snap_enabled, "旋转吸附",
+                                                  &ikState->rotate_snap_enabled);
+            if (ikState->translate_snap_enabled) {
+                kinematic_viewer::SidebarDragFloat("平移步长", &ikState->translate_snap_step_m, 0.001f, 0.001f, 0.20f, "%.3f");
+            }
+            if (ikState->rotate_snap_enabled) {
+                kinematic_viewer::SidebarDragFloat("旋转步长", &ikState->rotate_snap_step_deg, 0.2f, 0.2f, 45.0f, "%.1f");
+            }
+            ImGui::Columns(2, "##ik_gain_cols", false);
+            kinematic_viewer::SidebarSliderFloat("Tx", &ikState->translate_channel_gain[0], 0.0f, 2.0f, "%.2f");
+            ImGui::NextColumn();
+            kinematic_viewer::SidebarSliderFloat("Ty", &ikState->translate_channel_gain[1], 0.0f, 2.0f, "%.2f");
+            ImGui::NextColumn();
+            kinematic_viewer::SidebarSliderFloat("Tz", &ikState->translate_channel_gain[2], 0.0f, 2.0f, "%.2f");
+            ImGui::NextColumn();
+            kinematic_viewer::SidebarSliderFloat("Rx", &ikState->rotate_channel_gain[0], 0.0f, 2.0f, "%.2f");
+            ImGui::NextColumn();
+            kinematic_viewer::SidebarSliderFloat("Ry", &ikState->rotate_channel_gain[1], 0.0f, 2.0f, "%.2f");
+            ImGui::NextColumn();
+            kinematic_viewer::SidebarSliderFloat("Rz", &ikState->rotate_channel_gain[2], 0.0f, 2.0f, "%.2f");
+            ImGui::Columns(1);
+        }
+
+        if (ImGui::CollapsingHeader("目标位姿与求解", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextDisabled("直接在3D视窗抓取 Gizmo 轴/圆环进行平移或旋转");
+            const glm::vec3 marker_pos_now(ikState->marker_pos[0], ikState->marker_pos[1], ikState->marker_pos[2]);
+            const glm::quat marker_q_now = glm::normalize(glm::quat_cast(markerWorldMatrix(
+                glm::vec3(0.0f), glm::vec3(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]))));
+            const std::string marker_pose_text = FormatPoseInputXyzQuat(marker_pos_now, marker_q_now);
+            char marker_pose_display[256]      = {0};
+            std::snprintf(marker_pose_display, sizeof(marker_pose_display), "%s", marker_pose_text.c_str());
+            kinematic_viewer::PushSidebarFullWidth();
+            ImGui::InputText("当前位姿", marker_pose_display, sizeof(marker_pose_display), ImGuiInputTextFlags_ReadOnly);
+            kinematic_viewer::PopSidebarWidth();
+            if (ImGui::SmallButton("复制")) {
+                ImGui::SetClipboardText(marker_pose_display);
+            }
+            static char marker_pose_input[256] = "";
+            if (marker_pose_input[0] == '\0') {
+                const std::string init_pose_text = FormatPoseInputXyzQuat(marker_pos_now, marker_q_now);
+                std::snprintf(marker_pose_input, sizeof(marker_pose_input), "%s", init_pose_text.c_str());
+            }
+            kinematic_viewer::PushSidebarFullWidth();
+            ImGui::InputText("目标位姿", marker_pose_input, sizeof(marker_pose_input));
+            kinematic_viewer::PopSidebarWidth();
+            if (ImGui::SmallButton("填充")) {
+                const glm::vec3 marker_pos_now(ikState->marker_pos[0], ikState->marker_pos[1], ikState->marker_pos[2]);
+                const glm::quat marker_q_now = glm::normalize(glm::quat_cast(markerWorldMatrix(
+                    glm::vec3(0.0f), glm::vec3(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]))));
+                const std::string pose_text  = FormatPoseInputXyzQuat(marker_pos_now, marker_q_now);
+                std::snprintf(marker_pose_input, sizeof(marker_pose_input), "%s", pose_text.c_str());
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("应用")) {
+                glm::vec3 parsed_pos(0.0f);
+                glm::quat parsed_quat(1.0f, 0.0f, 0.0f, 0.0f);
+                std::string parse_error;
+                if (ParsePoseInputXyzQuat(marker_pose_input, &parsed_pos, &parsed_quat, &parse_error)) {
+                    ikState->marker_pos[0] = parsed_pos.x;
+                    ikState->marker_pos[1] = parsed_pos.y;
+                    ikState->marker_pos[2] = parsed_pos.z;
+                    if (!ikState->lock_orientation) {
+                        const glm::vec3 parsed_rpy = glm::degrees(glm::eulerAngles(parsed_quat));
+                        ikState->marker_rpy_deg[0] = parsed_rpy.x;
+                        ikState->marker_rpy_deg[1] = parsed_rpy.y;
+                        ikState->marker_rpy_deg[2] = parsed_rpy.z;
+                    }
+                    ikController->SaveActiveMarkerToTarget();
+                    ikController->ApplyIkForActiveChain(scene, false, false, false);
+                    if (ikState->lock_orientation) {
+                        ikState->last_status = "位姿串已应用：姿态锁定，仅更新了位置";
+                    } else {
+                        ikState->last_status = "位姿串已应用";
+                    }
+                } else {
+                    ikState->last_status = std::string("位姿串应用失败: ") + parse_error;
+                }
+            }
+            kinematic_viewer::PushSidebarFullWidth();
+            bool marker_pos_edited = ImGui::DragFloat3("位置", ikState->marker_pos, 0.002f, -2.0f, 2.0f, "%.3f");
+            bool marker_pos_commit = ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::BeginDisabled(ikState->lock_orientation);
+            bool marker_rot_edited = ImGui::DragFloat3("RPY°", ikState->marker_rpy_deg, 0.2f, -180.0f, 180.0f, "%.1f");
+            kinematic_viewer::PopSidebarWidth();
+            bool marker_rot_commit = ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::EndDisabled();
+            if (marker_pos_edited || marker_rot_edited) {
+                ikController->SaveActiveMarkerToTarget();
+                if (ikState->realtime_ik_during_drag) {
+                    const bool position_only_target = marker_pos_edited && !marker_rot_edited;
+                    ikController->ApplyIkForActiveChain(scene, false, true, position_only_target);
+                }
+            } else if (!ikState->realtime_ik_during_drag && (marker_pos_commit || marker_rot_commit)) {
+                const bool position_only_target = marker_pos_commit && !marker_rot_commit;
+                ikController->ApplyIkForActiveChain(scene, false, false, position_only_target);
+            }
+            if (ImGui::SmallButton("同步末端")) {
+                glm::vec3 tip_pos(0.0f);
+                glm::vec3 tip_rpy(0.0f);
+                if (ikState->solver.fetchTipWorldPose(*scene, ikState->selected_chain, &tip_pos, &tip_rpy)) {
+                    ikState->marker_pos[0]      = tip_pos.x;
+                    ikState->marker_pos[1]      = tip_pos.y;
+                    ikState->marker_pos[2]      = tip_pos.z;
+                    ikState->marker_rpy_deg[0]  = glm::degrees(tip_rpy.x);
+                    ikState->marker_rpy_deg[1]  = glm::degrees(tip_rpy.y);
+                    ikState->marker_rpy_deg[2]  = glm::degrees(tip_rpy.z);
+                    ikState->marker_initialized = true;
+                    ikController->SaveActiveMarkerToTarget();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("求解IK")) {
+                ikController->ApplyIkForActiveChain(scene, false, false, false);
+            }
+            if (!ikState->last_status.empty()) {
+                ImGui::TextUnformatted(ikState->last_status.c_str());
+            }
+            ImGui::TextDisabled("base=%s  tip=%s", chain_status.config.base_link.c_str(), chain_status.config.tip_link.c_str());
+
+            glm::vec3 tip_pos(0.0f);
+            glm::vec3 tip_rpy(0.0f);
+            if (ikState->solver.fetchTipWorldPose(*scene, ikState->selected_chain, &tip_pos, &tip_rpy)) {
+                glm::vec3 marker_p(ikState->marker_pos[0], ikState->marker_pos[1], ikState->marker_pos[2]);
+                float pos_err_mm = glm::length(marker_p - tip_pos) * 1000.0f;
+                glm::vec3 tip_rpy_deg(glm::degrees(tip_rpy.x), glm::degrees(tip_rpy.y), glm::degrees(tip_rpy.z));
+                glm::vec3 marker_rpy(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]);
+                glm::vec3 drpy = glm::abs(marker_rpy - tip_rpy_deg);
+                ImVec4 ce      = (pos_err_mm < 2.0f) ? ImVec4(0.6f, 0.95f, 0.6f, 1.0f)
+                                                     : ((pos_err_mm < 8.0f) ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f)
+                                                                            : ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ImGui::TextColored(ce, "末端误差: 位置 %.2f mm, 姿态 %.2f/%.2f/%.2f deg", pos_err_mm, drpy.x, drpy.y, drpy.z);
+            }
+        }
     }
 
     void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,

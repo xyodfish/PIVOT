@@ -1,5 +1,7 @@
 #include "kinematic_viewer/kinematic_link_inspector.h"
 
+#include "kinematic_viewer/kinematic_angle_units.h"
+
 #include "imgui.h"
 
 #include <glm/gtc/quaternion.hpp>
@@ -175,9 +177,12 @@ namespace kinematic_viewer {
         if (ImGui::CollapsingHeader("关节", ImGuiTreeNodeFlags_DefaultOpen) && has_joint) {
             ImGui::Text("joint: %s  type: %s", parent_joint_name.c_str(), joint_detail.type.c_str());
             if (joint_detail.revolute) {
-                ImGui::Text("q: %.3f rad (%.1f deg)", joint_detail.position, glm::degrees(joint_detail.position));
+                const float q_ui = AngleUiFromRad(joint_detail.position, ui_state->angle_unit_deg);
+                ImGui::Text("q: %.4f %s", q_ui, AngleUnitLabel(ui_state->angle_unit_deg));
                 if (joint_detail.has_limits) {
-                    ImGui::Text("limit: [%.3f, %.3f] rad", joint_detail.lower_limit, joint_detail.upper_limit);
+                    const float lo_ui = AngleUiFromRad(joint_detail.lower_limit, ui_state->angle_unit_deg);
+                    const float hi_ui = AngleUiFromRad(joint_detail.upper_limit, ui_state->angle_unit_deg);
+                    ImGui::Text("limit: [%.4f, %.4f] %s", lo_ui, hi_ui, AngleUnitLabel(ui_state->angle_unit_deg));
                 }
             } else {
                 ImGui::Text("q: %.4f m", joint_detail.position);
@@ -190,9 +195,11 @@ namespace kinematic_viewer {
             glm::mat4 world_tf(1.0f);
             if (scene->getLinkWorldTransform(link_name, &world_tf)) {
                 const glm::vec3 pos  = glm::vec3(world_tf[3]);
-                const glm::vec3 rpy = glm::degrees(glm::eulerAngles(glm::normalize(glm::quat_cast(world_tf))));
+                const glm::vec3 rpy_rad = glm::eulerAngles(glm::normalize(glm::quat_cast(world_tf)));
+                const glm::vec3 rpy_ui(AngleUiFromRad(rpy_rad.x, ui_state->angle_unit_deg), AngleUiFromRad(rpy_rad.y, ui_state->angle_unit_deg),
+                                       AngleUiFromRad(rpy_rad.z, ui_state->angle_unit_deg));
                 ImGui::Text("pos: %.3f, %.3f, %.3f m", pos.x, pos.y, pos.z);
-                ImGui::Text("rpy: %.1f, %.1f, %.1f deg", rpy.x, rpy.y, rpy.z);
+                ImGui::Text("rpy: %.2f, %.2f, %.2f %s", rpy_ui.x, rpy_ui.y, rpy_ui.z, AngleUnitLabel(ui_state->angle_unit_deg));
             }
 
             if (kinematics_analyzer != nullptr) {

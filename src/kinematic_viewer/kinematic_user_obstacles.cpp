@@ -1,4 +1,5 @@
 #include "kinematic_viewer/kinematic_user_obstacles.h"
+#include "kinematic_viewer/kinematic_angle_units.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
 
 #include "kinematic_viewer/kinematic_marker_utils.h"
@@ -457,10 +458,20 @@ namespace kinematic_viewer {
         }
     }
 
-    void RenderUserObstaclePanel(UserObstacleState* st) {
+    void RenderUserObstaclePanel(UserObstacleState* st, bool angle_unit_deg) {
         if (st == nullptr) {
             return;
         }
+        const auto draw_rpy_drag = [&](const char* label, glm::vec3* rpy_deg_stored) {
+            if (rpy_deg_stored == nullptr) {
+                return;
+            }
+            glm::vec3 rpy_ui = RpyUiFromDegStored(*rpy_deg_stored, angle_unit_deg);
+            if (ImGui::DragFloat3(label, glm::value_ptr(rpy_ui), angle_unit_deg ? 0.2f : 0.01f, AngleDragMin(angle_unit_deg),
+                                  AngleDragMax(angle_unit_deg), AngleInputFormat(angle_unit_deg))) {
+                *rpy_deg_stored = RpyUiToDegStored(rpy_ui, angle_unit_deg);
+            }
+        };
         ImGui::TextUnformatted("自定义障碍物");
         static std::vector<UserObstacleItem> undo_items;
         static int undo_selected_index = -1;
@@ -886,7 +897,11 @@ namespace kinematic_viewer {
             }
             ImGui::ColorEdit3("颜色(新建)", glm::value_ptr(draft.color));
             ImGui::DragFloat3("位置(m, 新建)", glm::value_ptr(draft.position), 0.005f, -10.0f, 10.0f, "%.3f");
-            ImGui::DragFloat3("姿态rpy(deg, 新建)", glm::value_ptr(draft.rpy_deg), 0.2f, -360.0f, 360.0f, "%.1f");
+            {
+                char draft_rpy_label[40];
+                std::snprintf(draft_rpy_label, sizeof(draft_rpy_label), "姿态rpy(%s, 新建)", AngleUnitLabel(angle_unit_deg));
+                draw_rpy_drag(draft_rpy_label, &draft.rpy_deg);
+            }
             if (draft.kind == UserObstacleItem::Kind::Box) {
                 ImGui::DragFloat3("长宽高(m, 新建)", glm::value_ptr(draft.params), 0.005f, 0.02f, 5.0f, "%.3f");
             } else if (draft.kind == UserObstacleItem::Kind::Sphere) {
@@ -1047,7 +1062,11 @@ namespace kinematic_viewer {
                 }
                 ImGui::ColorEdit3("颜色", glm::value_ptr(o.color));
                 ImGui::DragFloat3("位置 (m)", glm::value_ptr(o.position), 0.005f, -10.0f, 10.0f, "%.3f");
-                ImGui::DragFloat3("姿态 rpy (deg)", glm::value_ptr(o.rpy_deg), 0.2f, -360.0f, 360.0f, "%.1f");
+                {
+                    char selected_rpy_label[40];
+                    std::snprintf(selected_rpy_label, sizeof(selected_rpy_label), "姿态 rpy (%s)", AngleUnitLabel(angle_unit_deg));
+                    draw_rpy_drag(selected_rpy_label, &o.rpy_deg);
+                }
                 if (o.kind == UserObstacleItem::Kind::Box) {
                     ImGui::DragFloat3("长宽高 (m)", glm::value_ptr(o.params), 0.005f, 0.02f, 5.0f, "%.3f");
                 } else if (o.kind == UserObstacleItem::Kind::Sphere) {

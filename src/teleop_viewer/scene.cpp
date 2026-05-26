@@ -454,6 +454,7 @@ namespace teleop_viewer {
         std::unordered_map<std::string, LinkInertialLocal> link_inertials;
         std::vector<PickMeshTriangle> pick_mesh_triangles;
         bool pick_mesh_cache_dirty = true;
+        bool joint_pose_dirty      = false;
         std::unordered_map<std::string, std::string> link_to_parent_joint;
         std::unordered_map<std::string, JointDetailInfo> joint_details;
         std::vector<JointState> joint_states;
@@ -1159,11 +1160,21 @@ namespace teleop_viewer {
     bool RobotScene::setJointPositionByName(const std::string& joint_name, float new_position) {
         for (auto& js : impl_->joint_states) {
             if (js.name == joint_name) {
-                js.position = new_position;
+                if (std::fabs(js.position - new_position) < 1e-7f) {
+                    return true;
+                }
+                js.position           = new_position;
+                impl_->joint_pose_dirty = true;
                 return true;
             }
         }
         return false;
+    }
+
+    bool RobotScene::consumeJointPoseDirty() {
+        const bool dirty           = impl_->joint_pose_dirty;
+        impl_->joint_pose_dirty = false;
+        return dirty;
     }
 
     bool RobotScene::getJointInfo(const std::string& joint_name, JointInfo* out) const {

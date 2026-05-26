@@ -16,7 +16,7 @@ namespace kinematic_viewer {
     class KinematicRosBridge;
 
     void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene = nullptr);
-    void RenderIkPanel(IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
                        teleop_viewer::RobotScene* scene);
     void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
                                   teleop_viewer::OrbitCamera* camera, const CollisionMonitorState* collisionState,
@@ -80,7 +80,7 @@ namespace kinematic_viewer {
         char export_name[128] = "planned_trajectory.csv";
     };
 
-    void RenderPathPlannerPanel(PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,
+    void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,
                                 teleop_viewer::RobotScene* scene, teleop_viewer::IkSolver* solver,
                                 const std::vector<teleop_viewer::IkChainStatus>& chains);
 

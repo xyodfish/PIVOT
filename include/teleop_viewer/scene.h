@@ -100,6 +100,7 @@ namespace teleop_viewer {
 
         size_t applyJointSamples(const std::vector<SensorJointSample>& samples, bool only_master_arm);
         bool setJointPositionByName(const std::string& joint_name, float new_position);
+        bool consumeJointPoseDirty();
 
         bool getJointInfo(const std::string& joint_name, JointInfo* out) const;
         std::vector<JointInfo> getJointInfos() const;

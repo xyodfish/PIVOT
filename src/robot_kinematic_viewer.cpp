@@ -17,6 +17,7 @@
 #include "kinematic_viewer/kinematic_runtime_state.h"
 #include "kinematic_viewer/kinematic_shader_utils.h"
 #include "kinematic_viewer/kinematic_robot_tree_panel.h"
+#include "kinematic_viewer/kinematic_angle_units.h"
 #include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
@@ -760,11 +761,13 @@ int main(int argc, char** argv) {
             ui_state.hovered_link.clear();
         }
 
-        auto link_pick = input_handler.UpdateLinkPick(input_ctx, pick_view, pick_proj, &scene);
-        if (link_pick.picked) {
-            ui_state.selected_link            = link_pick.link_name;
-            ui_state.trajectory_min_surface_m = -1.0f;
-            ui_state.selected_joint           = -1;
+        if (ui_state.enable_link_click_select) {
+            auto link_pick = input_handler.UpdateLinkPick(input_ctx, pick_view, pick_proj, &scene);
+            if (link_pick.picked) {
+                ui_state.selected_link            = link_pick.link_name;
+                ui_state.trajectory_min_surface_m = -1.0f;
+                ui_state.selected_joint           = -1;
+            }
         }
 
         input_ctx.ik_gizmo_using     = ik_state.gizmo_was_using;
@@ -913,7 +916,7 @@ int main(int argc, char** argv) {
         }
         if (ImGui::CollapsingHeader("操作提示")) {
             ImGui::TextDisabled("视角：左键旋转，中键/Shift+左键平移，右键缩放，滚轮缩放");
-            ImGui::TextDisabled("快捷键 1-8 切换子页；3D 左键点选 link");
+            ImGui::TextDisabled("快捷键 1-8 切换子页；场景页可开启 3D 点选 Link");
         }
         ImGui::Separator();
         struct SidebarTab {
@@ -955,6 +958,8 @@ int main(int argc, char** argv) {
         ImGui::Separator();
 
         kinematic_viewer::BeginSidebarScrollRegion("##sidebar_scroll");
+        kinematic_viewer::RenderAngleUnitSelector(&ui_state.angle_unit_deg);
+        ImGui::Separator();
 
         if (kinematic_viewer::SidebarPageShowsLinkInspector(ui_state.sidebar_page)) {
             RenderLinkInspectorPanel(&ui_state, &scene, &camera, &collision_state, &collision_result, &playback_state,
@@ -974,7 +979,7 @@ int main(int argc, char** argv) {
         }
 
         if (ui_state.sidebar_page == 1) {
-            RenderIkPanel(&ik_state, &ik_controller, &ros_bridge, &scene);
+            RenderIkPanel(&ui_state, &ik_state, &ik_controller, &ros_bridge, &scene);
         }
 
         if (ui_state.sidebar_page == 2) {
@@ -992,10 +997,20 @@ int main(int argc, char** argv) {
             RenderObstaclePanel(&ui_state);
         }
         if (ui_state.sidebar_page == 7) {
-            RenderPathPlannerPanel(&path_planner_ui, &playback_state, &scene, &ik_state.solver, ik_state.chains);
+            RenderPathPlannerPanel(&ui_state, &path_planner_ui, &playback_state, &scene, &ik_state.solver, ik_state.chains);
         }
 
         kinematic_viewer::EndSidebarScrollRegion();
+
+        if (scene.consumeJointPoseDirty()) {
+            scene.updateTransforms();
+            if (collision_state.enable) {
+                collision_result = collision_monitor.Evaluate(collision_state, scene);
+                MergeUserObstaclesIntoCollisionResult(ui_state.user_obstacles, scene, collision_state.warning_distance_m,
+                                                      collision_state.danger_distance_m, &collision_result);
+                collision_monitor.UpdateStateFromResult(collision_result, &collision_state);
+            }
+        }
 
         if (playback_state.trajectory_io_status != last_playback_io_status) {
             if (!playback_state.trajectory_io_status.empty()) {

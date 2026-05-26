@@ -2,6 +2,7 @@
 
 #include "kinematic_viewer/kinematic_ik_controller.h"
 #include "kinematic_viewer/kinematic_marker_utils.h"
+#include "kinematic_viewer/kinematic_angle_units.h"
 #include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_ros_bridge.h"
@@ -11,6 +12,7 @@
 #include "kinematic_viewer/kinematic_user_obstacles.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -19,7 +21,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -69,8 +74,22 @@ namespace kinematic_viewer {
                 return false;
             }
             std::string normalized = rawValues;
+            const auto replace_all = [](std::string* text, const char* from, const char* to) {
+                if (text == nullptr || from == nullptr || to == nullptr) {
+                    return;
+                }
+                const size_t from_len = std::strlen(from);
+                size_t pos            = 0;
+                while ((pos = text->find(from, pos)) != std::string::npos) {
+                    text->replace(pos, from_len, to);
+                    pos += 1;
+                }
+            };
+            replace_all(&normalized, "、", " ");
+            replace_all(&normalized, "，", " ");
+            replace_all(&normalized, "；", " ");
             for (char& ch : normalized) {
-                if (ch == ',' || ch == '[' || ch == ']' || ch == '\t') {
+                if (ch == ',' || ch == ';' || ch == '[' || ch == ']' || ch == '\t') {
                     ch = ' ';
                 }
             }
@@ -94,6 +113,76 @@ namespace kinematic_viewer {
             }
             *outValues = std::move(values);
             return true;
+        }
+
+        bool ParseJointValuesToRad(const std::string& rawValues, bool angle_unit_deg, std::vector<float>* outRad,
+                                   std::string* errorMessage) {
+            std::vector<float> ui_values;
+            if (!ParseJointValuesRad(rawValues, &ui_values, errorMessage)) {
+                return false;
+            }
+            if (outRad == nullptr) {
+                return true;
+            }
+            outRad->resize(ui_values.size());
+            for (size_t i = 0; i < ui_values.size(); ++i) {
+                (*outRad)[i] = AngleUiToRad(ui_values[i], angle_unit_deg);
+            }
+            return true;
+        }
+
+        bool TryReadJointPositionRad(teleop_viewer::RobotScene* scene, const std::string& joint_name, float* out_rad) {
+            if (scene == nullptr || out_rad == nullptr) {
+                return false;
+            }
+            teleop_viewer::RobotScene::JointInfo info;
+            if (!scene->getJointInfo(joint_name, &info)) {
+                return false;
+            }
+            *out_rad = info.position;
+            return true;
+        }
+
+        std::string FormatJointGroupLine(const ViewerState::JointInputGroup& group, teleop_viewer::RobotScene* scene, bool use_deg) {
+            const int precision = use_deg ? 2 : 4;
+            std::ostringstream ss;
+            ss << group.name << ": ";
+            for (size_t i = 0; i < group.joint_names.size(); ++i) {
+                if (i > 0) {
+                    ss << "、";
+                }
+                float rad = 0.0f;
+                if (!TryReadJointPositionRad(scene, group.joint_names[i], &rad)) {
+                    ss << (use_deg ? "0.00" : "0.0000");
+                    continue;
+                }
+                ss << std::fixed << std::setprecision(precision) << AngleUiFromRad(rad, use_deg);
+            }
+            return ss.str();
+        }
+
+        std::string FormatAllJointGroups(const ViewerState& uiState, teleop_viewer::RobotScene* scene, bool use_deg) {
+            std::ostringstream ss;
+            for (size_t g = 0; g < uiState.joint_input_groups.size(); ++g) {
+                if (g > 0) {
+                    ss << '\n';
+                }
+                ss << FormatJointGroupLine(uiState.joint_input_groups[g], scene, use_deg);
+            }
+            return ss.str();
+        }
+
+        void CopyTextToClipboard(const std::string& text) {
+            if (!text.empty()) {
+                ImGui::SetClipboardText(text.c_str());
+            }
+        }
+
+        void CopyJointGroupLineToInput(char* dest, size_t dest_size, const std::string& line) {
+            if (dest == nullptr || dest_size == 0) {
+                return;
+            }
+            std::snprintf(dest, dest_size, "%s", line.c_str());
         }
 
         const ViewerState::JointInputGroup* FindJointInputGroup(const ViewerState& uiState, const std::string& groupNameRaw) {
@@ -127,15 +216,23 @@ namespace kinematic_viewer {
                 return false;
             }
 
-            size_t firstSpace = line.find_first_of(" \t");
-            if (firstSpace == std::string::npos) {
-                if (errorMessage != nullptr) {
-                    *errorMessage = "格式错误，应为: group v1,v2,...";
+            std::string groupName;
+            std::string valuesRaw;
+            const size_t colon_pos = line.find(':');
+            if (colon_pos != std::string::npos) {
+                groupName = TrimCopy(line.substr(0, colon_pos));
+                valuesRaw = TrimCopy(line.substr(colon_pos + 1));
+            } else {
+                const size_t firstSpace = line.find_first_of(" \t");
+                if (firstSpace == std::string::npos) {
+                    if (errorMessage != nullptr) {
+                        *errorMessage = "格式错误，应为: group: v1、v2,... 或 group v1 v2 ...";
+                    }
+                    return false;
                 }
-                return false;
+                groupName = TrimCopy(line.substr(0, firstSpace));
+                valuesRaw = TrimCopy(line.substr(firstSpace + 1));
             }
-            const std::string groupName = line.substr(0, firstSpace);
-            const std::string valuesRaw = TrimCopy(line.substr(firstSpace + 1));
             if (valuesRaw.empty()) {
                 if (errorMessage != nullptr) {
                     *errorMessage = "缺少关节角列表";
@@ -157,25 +254,26 @@ namespace kinematic_viewer {
                 return false;
             }
 
-            std::vector<float> values;
+            std::vector<float> values_rad;
             std::string parseError;
-            if (!ParseJointValuesRad(valuesRaw, &values, &parseError)) {
+            if (!ParseJointValuesToRad(valuesRaw, uiState.angle_unit_deg, &values_rad, &parseError)) {
                 if (errorMessage != nullptr) {
                     *errorMessage = parseError;
                 }
                 return false;
             }
-            if (values.size() != group->joint_names.size()) {
+            if (values_rad.size() != group->joint_names.size()) {
                 if (errorMessage != nullptr) {
                     std::stringstream ss;
-                    ss << "group[" << group->name << "] 维度不匹配，期望 " << group->joint_names.size() << "，实际 " << values.size();
+                    ss << "group[" << group->name << "] 维度不匹配，期望 " << group->joint_names.size() << "，实际 "
+                       << values_rad.size();
                     *errorMessage = ss.str();
                 }
                 return false;
             }
 
             for (size_t i = 0; i < group->joint_names.size(); ++i) {
-                if (!scene->setJointPositionByName(group->joint_names[i], values[i])) {
+                if (!scene->setJointPositionByName(group->joint_names[i], values_rad[i])) {
                     if (errorMessage != nullptr) {
                         *errorMessage = "场景不存在关节: " + group->joint_names[i];
                     }
@@ -573,7 +671,7 @@ namespace kinematic_viewer {
                 const glm::quat quat = glm::angleAxis(base_yaw, glm::vec3(0.0f, 0.0f, 1.0f));
                 text = FormatPoseInputXyzQuat(pos, quat);
             } else {
-                text = FormatPoseInputXyYaw(base_x_m, base_y_m, base_yaw, uiState->mobile_base_yaw_unit_deg);
+                text = FormatPoseInputXyYaw(base_x_m, base_y_m, base_yaw, uiState->angle_unit_deg);
             }
             std::snprintf(uiState->mobile_base_pose_input, sizeof(uiState->mobile_base_pose_input), "%s", text.c_str());
         }
@@ -601,16 +699,16 @@ namespace kinematic_viewer {
             float parsed_y = 0.0f;
             float parsed_yaw = 0.0f;
             std::string parse_error;
-            if (!ParsePoseInputXyYaw(uiState->mobile_base_pose_input, &parsed_x, &parsed_y, &parsed_yaw,
-                                     uiState->mobile_base_yaw_unit_deg, &parse_error)) {
+            if (!ParsePoseInputXyYaw(uiState->mobile_base_pose_input, &parsed_x, &parsed_y, &parsed_yaw, uiState->angle_unit_deg,
+                                     &parse_error)) {
                 uiState->mobile_base_pose_input_status = "应用失败: " + parse_error;
                 return false;
             }
             scene->setVirtualBasePose2D(parsed_x, parsed_y, parsed_yaw);
             uiState->mobile_base_pose_input_status =
                 std::string("已应用: x=") + std::to_string(parsed_x) + " y=" + std::to_string(parsed_y) + " yaw=" +
-                (uiState->mobile_base_yaw_unit_deg ? std::to_string(glm::degrees(parsed_yaw)) + "°"
-                                                   : std::to_string(parsed_yaw) + " rad");
+                (uiState->angle_unit_deg ? std::to_string(glm::degrees(parsed_yaw)) + " deg"
+                                         : std::to_string(parsed_yaw) + " rad");
             return true;
         }
 
@@ -629,6 +727,9 @@ namespace kinematic_viewer {
                               &uiState->show_non_revolute, "世界轴", &uiState->show_world_axes);
         ImGui::Checkbox("固定底座", &uiState->lock_base);
         ImGui::Checkbox("Link悬停高亮", &uiState->enable_link_hover_highlight);
+        if (ImGui::Checkbox("3D点选Link", &uiState->enable_link_click_select) && !uiState->enable_link_click_select) {
+            uiState->selected_link.clear();
+        }
         if (uiState->mobile_base_drag_available) {
             if (ImGui::Checkbox("底盘拖动Gizmo", &uiState->mobile_base_drag_enabled) && uiState->mobile_base_drag_enabled) {
                 uiState->lock_base = false;
@@ -640,21 +741,16 @@ namespace kinematic_viewer {
                     float base_y_m = 0.0f;
                     float base_yaw = 0.0f;
                     if (scene->getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
-                        ImGui::Text("底盘位姿: x=%.3f m  y=%.3f m  yaw=%.1f°", base_x_m, base_y_m, glm::degrees(base_yaw));
+                        const float yaw_ui = AngleUiFromRad(base_yaw, uiState->angle_unit_deg);
+                        ImGui::Text("底盘位姿: x=%.3f m  y=%.3f m  yaw=%.2f %s", base_x_m, base_y_m, yaw_ui,
+                                    AngleUnitLabel(uiState->angle_unit_deg));
                     }
                 }
                 ImGui::Separator();
-                ImGui::TextUnformatted("底盘位姿手动输入");
+                ImGui::TextUnformatted("底盘位姿手动输入（yaw 单位跟随顶部角度单位）");
                 ImGui::RadioButton("x,y,yaw##base_fmt_xy_yaw", &uiState->mobile_base_pose_input_format, 0);
                 ImGui::SameLine();
                 ImGui::RadioButton("x,y,z,qx,qy,qz,qw##base_fmt_xyz_quat", &uiState->mobile_base_pose_input_format, 1);
-                if (uiState->mobile_base_pose_input_format == 0) {
-                    int yaw_unit = uiState->mobile_base_yaw_unit_deg ? 1 : 0;
-                    ImGui::RadioButton("Yaw: deg##base_yaw_unit", &yaw_unit, 1);
-                    ImGui::SameLine();
-                    ImGui::RadioButton("Yaw: rad##base_yaw_unit", &yaw_unit, 0);
-                    uiState->mobile_base_yaw_unit_deg = (yaw_unit == 1);
-                }
                 const char* input_label = (uiState->mobile_base_pose_input_format == 1) ? "x,y,z,qx,qy,qz,qw##base_pose_input"
                                                                                         : "x,y,yaw##base_pose_input";
                 if (uiState->mobile_base_pose_input[0] == '\0') {
@@ -696,14 +792,15 @@ namespace kinematic_viewer {
             return;
         }
         ImGui::Separator();
-        RenderUserObstaclePanel(&uiState->user_obstacles);
+        RenderUserObstaclePanel(&uiState->user_obstacles, uiState->angle_unit_deg);
     }
 
-    void RenderIkPanel(IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
                        teleop_viewer::RobotScene* scene) {
-        if (ikState == nullptr || ikController == nullptr || rosBridge == nullptr || scene == nullptr) {
+        if (uiState == nullptr || ikState == nullptr || ikController == nullptr || rosBridge == nullptr || scene == nullptr) {
             return;
         }
+        const bool use_deg = uiState->angle_unit_deg;
         if (ikState->chains.empty()) {
             ImGui::TextDisabled("无 IK 链配置");
             return;
@@ -803,7 +900,13 @@ namespace kinematic_viewer {
                 kinematic_viewer::SidebarDragFloat("平移步长", &ikState->translate_snap_step_m, 0.001f, 0.001f, 0.20f, "%.3f");
             }
             if (ikState->rotate_snap_enabled) {
-                kinematic_viewer::SidebarDragFloat("旋转步长", &ikState->rotate_snap_step_deg, 0.2f, 0.2f, 45.0f, "%.1f");
+                float rotate_snap_ui = AngleUiFromDegStored(ikState->rotate_snap_step_deg, use_deg);
+                const float snap_max = use_deg ? 45.0f : glm::radians(45.0f);
+                char snap_label[32];
+                std::snprintf(snap_label, sizeof(snap_label), "旋转步长(%s)", AngleUnitLabel(use_deg));
+                kinematic_viewer::SidebarDragFloat(snap_label, &rotate_snap_ui, use_deg ? 0.2f : 0.01f, use_deg ? 0.2f : 0.01f,
+                                                   snap_max, AngleInputFormat(use_deg));
+                ikState->rotate_snap_step_deg = AngleUiToDegStored(rotate_snap_ui, use_deg);
             }
             ImGui::Columns(2, "##ik_gain_cols", false);
             kinematic_viewer::SidebarSliderFloat("Tx", &ikState->translate_channel_gain[0], 0.0f, 2.0f, "%.2f");
@@ -879,7 +982,19 @@ namespace kinematic_viewer {
             bool marker_pos_edited = ImGui::DragFloat3("位置", ikState->marker_pos, 0.002f, -2.0f, 2.0f, "%.3f");
             bool marker_pos_commit = ImGui::IsItemDeactivatedAfterEdit();
             ImGui::BeginDisabled(ikState->lock_orientation);
-            bool marker_rot_edited = ImGui::DragFloat3("RPY°", ikState->marker_rpy_deg, 0.2f, -180.0f, 180.0f, "%.1f");
+            glm::vec3 marker_rpy_ui =
+                RpyUiFromDegStored(glm::vec3(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]), use_deg);
+            char rpy_label[24];
+            std::snprintf(rpy_label, sizeof(rpy_label), "RPY(%s)", AngleUnitLabel(use_deg));
+            bool marker_rot_edited =
+                ImGui::DragFloat3(rpy_label, glm::value_ptr(marker_rpy_ui), use_deg ? 0.2f : 0.01f, AngleDragMin(use_deg),
+                                  AngleDragMax(use_deg), AngleInputFormat(use_deg));
+            if (marker_rot_edited) {
+                const glm::vec3 stored_rpy = RpyUiToDegStored(marker_rpy_ui, use_deg);
+                ikState->marker_rpy_deg[0] = stored_rpy.x;
+                ikState->marker_rpy_deg[1] = stored_rpy.y;
+                ikState->marker_rpy_deg[2] = stored_rpy.z;
+            }
             kinematic_viewer::PopSidebarWidth();
             bool marker_rot_commit = ImGui::IsItemDeactivatedAfterEdit();
             ImGui::EndDisabled();
@@ -921,13 +1036,16 @@ namespace kinematic_viewer {
             if (ikState->solver.fetchTipWorldPose(*scene, ikState->selected_chain, &tip_pos, &tip_rpy)) {
                 glm::vec3 marker_p(ikState->marker_pos[0], ikState->marker_pos[1], ikState->marker_pos[2]);
                 float pos_err_mm = glm::length(marker_p - tip_pos) * 1000.0f;
-                glm::vec3 tip_rpy_deg(glm::degrees(tip_rpy.x), glm::degrees(tip_rpy.y), glm::degrees(tip_rpy.z));
-                glm::vec3 marker_rpy(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]);
-                glm::vec3 drpy = glm::abs(marker_rpy - tip_rpy_deg);
-                ImVec4 ce      = (pos_err_mm < 2.0f) ? ImVec4(0.6f, 0.95f, 0.6f, 1.0f)
+                const glm::vec3 tip_rpy_ui(AngleUiFromRad(tip_rpy.x, use_deg), AngleUiFromRad(tip_rpy.y, use_deg),
+                                           AngleUiFromRad(tip_rpy.z, use_deg));
+                const glm::vec3 marker_rpy_ui = RpyUiFromDegStored(
+                    glm::vec3(ikState->marker_rpy_deg[0], ikState->marker_rpy_deg[1], ikState->marker_rpy_deg[2]), use_deg);
+                const glm::vec3 drpy          = glm::abs(marker_rpy_ui - tip_rpy_ui);
+                ImVec4 ce                     = (pos_err_mm < 2.0f) ? ImVec4(0.6f, 0.95f, 0.6f, 1.0f)
                                                      : ((pos_err_mm < 8.0f) ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f)
                                                                             : ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-                ImGui::TextColored(ce, "末端误差: 位置 %.2f mm, 姿态 %.2f/%.2f/%.2f deg", pos_err_mm, drpy.x, drpy.y, drpy.z);
+                ImGui::TextColored(ce, "末端误差: 位置 %.2f mm, 姿态 %.2f/%.2f/%.2f %s", pos_err_mm, drpy.x, drpy.y, drpy.z,
+                                   AngleUnitLabel(use_deg));
             }
         }
     }
@@ -967,16 +1085,24 @@ namespace kinematic_viewer {
         std::string filter = uiState->joint_filter;
         std::transform(filter.begin(), filter.end(), filter.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
+        const bool joint_use_deg     = uiState->angle_unit_deg;
+        const char* joint_unit_label = AngleUnitLabel(joint_use_deg);
+        const char* angle_input_fmt  = AngleInputFormat(joint_use_deg);
+
         ImGui::Text("共 %d | 旋转 %d | 越界 %d", static_cast<int>(joints.size()), revoluteCount, clampedCount);
         if (!minName.empty()) {
             ImVec4 c = (minMarginDeg < 3.0f) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f)
                                              : ((minMarginDeg < 8.0f) ? ImVec4(1.0f, 0.75f, 0.25f, 1.0f) : ImVec4(0.6f, 0.9f, 0.6f, 1.0f));
-            ImGui::TextColored(c, "最小限位裕量: %.2f deg (%s)", minMarginDeg, minName.c_str());
+            if (joint_use_deg) {
+                ImGui::TextColored(c, "最小限位裕量: %.2f %s (%s)", minMarginDeg, joint_unit_label, minName.c_str());
+            } else {
+                ImGui::TextColored(c, "最小限位裕量: %.4f %s (%s)", glm::radians(minMarginDeg), joint_unit_label, minName.c_str());
+            }
         }
 
         if (uiState->joint_input_groups.empty()) {
             ImGui::TextDisabled("未配置关节分组（见 config.initial_pose）");
-        } else if (ImGui::CollapsingHeader("分组批量输入")) {
+        } else if (ImGui::CollapsingHeader("分组复制 / 应用", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (uiState->selected_joint_input_group < 0 ||
                 uiState->selected_joint_input_group >= static_cast<int>(uiState->joint_input_groups.size())) {
                 uiState->selected_joint_input_group = 0;
@@ -990,14 +1116,67 @@ namespace kinematic_viewer {
 
             const auto& selectedGroup = uiState->joint_input_groups[static_cast<size_t>(uiState->selected_joint_input_group)];
             ImGui::Text("%s (%d 关节)", selectedGroup.name.c_str(), static_cast<int>(selectedGroup.joint_names.size()));
-            SidebarInputTextMultiline("角度(rad)", uiState->joint_group_values_input, sizeof(uiState->joint_group_values_input), 52.0f);
-            if (ImGui::SmallButton("应用分组")) {
-                std::vector<float> values;
+            const std::string current_group_line =
+                kinematic_sidebar_panels_internal::FormatJointGroupLine(selectedGroup, scene, joint_use_deg);
+
+            ImGui::TextUnformatted("当前分组数据（复制即此格式）");
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(40, 48, 58, 255));
+            char group_preview[512] = {0};
+            std::snprintf(group_preview, sizeof(group_preview), "%s", current_group_line.c_str());
+            ImGui::InputTextMultiline("##group_preview", group_preview, sizeof(group_preview),
+                                      ImVec2(-1.0f, ImGui::GetTextLineHeight() * 2.2f), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopStyleColor();
+
+            if (ImGui::Button("复制当前分组到剪贴板")) {
+                kinematic_sidebar_panels_internal::CopyTextToClipboard(current_group_line);
+                uiState->joint_group_input_last_ok = true;
+                uiState->joint_group_input_status  = "已复制: " + selectedGroup.name;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("复制全部分组")) {
+                kinematic_sidebar_panels_internal::CopyTextToClipboard(
+                    kinematic_sidebar_panels_internal::FormatAllJointGroups(*uiState, scene, joint_use_deg));
+                uiState->joint_group_input_last_ok = true;
+                uiState->joint_group_input_status  = "已复制 head/leg/left_arm/right_arm 共 "
+                                                     + std::to_string(uiState->joint_input_groups.size()) + " 行";
+            }
+
+            ImGui::Separator();
+            ImGui::Text("编辑后应用（单位：%s）", joint_unit_label);
+            if (ImGui::SmallButton("用当前姿态填充")) {
+                kinematic_sidebar_panels_internal::CopyJointGroupLineToInput(uiState->joint_group_values_input,
+                                                                             sizeof(uiState->joint_group_values_input),
+                                                                             current_group_line);
+                uiState->joint_group_input_last_ok = true;
+                uiState->joint_group_input_status  = "已填充当前分组角度";
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("从剪贴板填入")) {
+                const char* clip = ImGui::GetClipboardText();
+                if (clip != nullptr && clip[0] != '\0') {
+                    kinematic_sidebar_panels_internal::CopyJointGroupLineToInput(uiState->joint_group_values_input,
+                                                                                 sizeof(uiState->joint_group_values_input), clip);
+                    uiState->joint_group_input_last_ok = true;
+                    uiState->joint_group_input_status  = "已从剪贴板填入下方文本框";
+                } else {
+                    uiState->joint_group_input_last_ok = false;
+                    uiState->joint_group_input_status  = "剪贴板为空";
+                }
+            }
+            {
+                char angle_field_label[32];
+                std::snprintf(angle_field_label, sizeof(angle_field_label), "角度(%s)", joint_unit_label);
+                SidebarInputTextMultiline(angle_field_label, uiState->joint_group_values_input,
+                                          sizeof(uiState->joint_group_values_input), 52.0f);
+            }
+            if (ImGui::Button("应用下方文本到当前分组")) {
+                std::vector<float> values_rad;
                 std::string error;
-                if (!kinematic_sidebar_panels_internal::ParseJointValuesRad(uiState->joint_group_values_input, &values, &error)) {
+                if (!kinematic_sidebar_panels_internal::ParseJointValuesToRad(uiState->joint_group_values_input, joint_use_deg,
+                                                                              &values_rad, &error)) {
                     uiState->joint_group_input_last_ok = false;
                     uiState->joint_group_input_status  = "应用失败: " + error;
-                } else if (!kinematic_sidebar_panels_internal::ApplyJointGroupValues(selectedGroup, values, scene, &error)) {
+                } else if (!kinematic_sidebar_panels_internal::ApplyJointGroupValues(selectedGroup, values_rad, scene, &error)) {
                     uiState->joint_group_input_last_ok = false;
                     uiState->joint_group_input_status  = "应用失败: " + error;
                 } else {
@@ -1005,10 +1184,26 @@ namespace kinematic_viewer {
                     uiState->joint_group_input_status  = "应用成功: " + selectedGroup.name;
                 }
             }
+            ImGui::SameLine();
+            if (ImGui::Button("直接应用剪贴板一行") && ImGui::GetClipboardText() != nullptr) {
+                std::string error;
+                if (kinematic_sidebar_panels_internal::ApplyJointGroupTextCommand(ImGui::GetClipboardText(), *uiState, scene,
+                                                                                  &error)) {
+                    uiState->joint_group_input_last_ok = true;
+                    uiState->joint_group_input_status  = "已从剪贴板应用";
+                } else {
+                    uiState->joint_group_input_last_ok = false;
+                    uiState->joint_group_input_status  = "应用失败: " + error;
+                }
+            }
 
-            if (ImGui::TreeNode("多组命令")) {
-                SidebarInputTextMultiline("命令", uiState->joint_group_input, sizeof(uiState->joint_group_input), 56.0f);
-                if (ImGui::SmallButton("应用全部")) {
+            if (ImGui::TreeNode("一次设置多组（高级）")) {
+                ImGui::TextDisabled("每行一组，数值单位跟随上方 deg/rad 选项：");
+                ImGui::TextDisabled(joint_use_deg ? "left_arm: 18.25、-60.08、43.12、..."
+                                                  : "left_arm: 0.32、-1.05、0.75、...");
+                ImGui::TextDisabled(joint_use_deg ? "head: 0.00、5.00" : "head: 0.00、0.09");
+                SidebarInputTextMultiline("多组命令", uiState->joint_group_input, sizeof(uiState->joint_group_input), 56.0f);
+                if (ImGui::Button("应用多组命令")) {
                 const std::string rawText               = uiState->joint_group_input;
                 const std::vector<std::string> commands = kinematic_sidebar_panels_internal::SplitJointGroupCommands(rawText);
                 if (commands.empty()) {
@@ -1086,14 +1281,17 @@ namespace kinematic_viewer {
         if (!uiState->selected_link.empty()) {
             scene->getParentJointNameForLink(uiState->selected_link, &parent_joint_for_selected_link);
         }
+        const ImVec2 joint_table_size = SidebarTableFillHeight(uiState->joint_section_height);
+        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(6.0f, 5.0f));
         if (ImGui::BeginTable("joint_table", 4,
                               ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
                                   ImGuiTableFlags_SizingFixedFit,
-                              SidebarListSize(uiState->joint_section_height))) {
-            ImGui::TableSetupColumn("关节", ImGuiTableColumnFlags_WidthFixed, 0.0f, 96.0f);
-            ImGui::TableSetupColumn("deg", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("值", ImGuiTableColumnFlags_WidthFixed, 0.0f, 52.0f);
-            ImGui::TableSetupColumn("限位", ImGuiTableColumnFlags_WidthFixed, 0.0f, 58.0f);
+                              joint_table_size)) {
+            ImGui::TableSetupColumn("关节", ImGuiTableColumnFlags_WidthFixed, 108.0f);
+            ImGui::TableSetupColumn("滑条", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(joint_use_deg ? "deg###joint_val" : "rad###joint_val", ImGuiTableColumnFlags_WidthFixed,
+                                    84.0f);
+            ImGui::TableSetupColumn("限位", ImGuiTableColumnFlags_WidthFixed, 60.0f);
             ImGui::TableHeadersRow();
 
             for (const auto& j : joints) {
@@ -1108,51 +1306,80 @@ namespace kinematic_viewer {
                 }
 
                 ImGui::TableNextRow();
+                ImGui::PushID(j.name.c_str());
+
                 ImGui::TableSetColumnIndex(0);
                 const bool joint_row_selected = (!parent_joint_for_selected_link.empty() && j.name == parent_joint_for_selected_link);
-                if (ImGui::Selectable(j.name.c_str(), joint_row_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                if (ImGui::Selectable(j.name.c_str(), joint_row_selected)) {
                     teleop_viewer::RobotScene::JointDetailInfo detail;
                     if (scene->getJointDetail(j.name, &detail)) {
                         uiState->selected_link            = detail.child_link;
                         uiState->trajectory_min_surface_m = -1.0f;
                     }
                 }
+
                 ImGui::TableSetColumnIndex(1);
-                float radValue = j.position;
                 if (j.revolute) {
-                    PushSidebarFullWidth();
-                    const std::string slider_deg_id = "##slider_deg_" + j.name;
-                    if (ImGui::SliderAngle(slider_deg_id.c_str(), &radValue, glm::degrees(j.min_angle), glm::degrees(j.max_angle))) {
-                        scene->setJointPositionByName(j.name, radValue);
+                    const float min_ui = AngleUiFromRad(j.min_angle, joint_use_deg);
+                    const float max_ui = AngleUiFromRad(j.max_angle, joint_use_deg);
+                    const ImGuiID slider_id = ImGui::GetID("##slider");
+                    const ImGuiID input_id  = ImGui::GetID("##joint_in");
+                    float uiValue           = AngleUiFromRad(j.position, joint_use_deg);
+                    ImGuiContext* imgui_ctx = ImGui::GetCurrentContext();
+                    if (imgui_ctx != nullptr && imgui_ctx->ActiveId != slider_id && imgui_ctx->ActiveId != input_id) {
+                        teleop_viewer::RobotScene::JointInfo live;
+                        if (scene->getJointInfo(j.name, &live)) {
+                            uiValue = AngleUiFromRad(live.position, joint_use_deg);
+                        }
                     }
-                    PopSidebarWidth();
+
+                    if (SidebarSliderFloatNoInput("##slider", &uiValue, min_ui, max_ui)) {
+                        uiValue = std::clamp(uiValue, min_ui, max_ui);
+                        scene->setJointPositionByName(j.name, AngleUiToRad(uiValue, joint_use_deg));
+                    }
+
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::SetNextItemWidth(-1.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
+                    ImGui::InputFloat("##joint_in", &uiValue, 0.0f, 0.0f, angle_input_fmt);
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        uiValue = std::clamp(uiValue, min_ui, max_ui);
+                        scene->setJointPositionByName(j.name, AngleUiToRad(uiValue, joint_use_deg));
+                    }
+                    ImGui::PopStyleVar();
                 } else {
                     ImGui::TextDisabled("-");
+                    ImGui::TableSetColumnIndex(2);
+                    float pos_m = j.position;
+                    teleop_viewer::RobotScene::JointInfo live;
+                    if (scene->getJointInfo(j.name, &live)) {
+                        pos_m = live.position;
+                    }
+                    ImGui::SetNextItemWidth(-1.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
+                    ImGui::InputFloat("##m_in", &pos_m, 0.0f, 0.0f, "%.4f");
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        scene->setJointPositionByName(j.name, pos_m);
+                    }
+                    ImGui::PopStyleVar();
                 }
 
-                ImGui::TableSetColumnIndex(2);
-                if (j.revolute) {
-                    float input_deg         = glm::degrees(j.position);
-                    const std::string input_deg_id = "##input_deg_" + j.name;
-                    if (ImGui::InputFloat(input_deg_id.c_str(), &input_deg, 0.0f, 0.0f, "%.1f")) {
-                        scene->setJointPositionByName(j.name, glm::radians(input_deg));
-                    }
-                } else {
-                    float input_m = j.position;
-                    if (ImGui::InputFloat(("##m_" + j.name).c_str(), &input_m, 0.0f, 0.0f, "%.3f")) {
-                        scene->setJointPositionByName(j.name, input_m);
-                    }
-                }
+                ImGui::PopID();
 
                 ImGui::TableSetColumnIndex(3);
                 if (j.revolute) {
-                    ImGui::Text("%.0f~%.0f", glm::degrees(j.min_angle), glm::degrees(j.max_angle));
+                    if (joint_use_deg) {
+                        ImGui::Text("%.0f~%.0f", glm::degrees(j.min_angle), glm::degrees(j.max_angle));
+                    } else {
+                        ImGui::Text("%.2f~%.2f", j.min_angle, j.max_angle);
+                    }
                 } else {
                     ImGui::TextDisabled("-");
                 }
             }
             ImGui::EndTable();
         }
+        ImGui::PopStyleVar();
     }
 
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
@@ -1520,8 +1747,16 @@ namespace kinematic_viewer {
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextUnformatted(tf.parent_name.empty() ? "-" : tf.parent_name.c_str());
                 ImGui::TableSetColumnIndex(2);
-                ImGui::Text("%.2f,%.2f,%.2f | %.0f,%.0f,%.0f", tf.world_position.x, tf.world_position.y, tf.world_position.z,
-                            glm::degrees(tf.world_rpy.x), glm::degrees(tf.world_rpy.y), glm::degrees(tf.world_rpy.z));
+                const float rpy_x = AngleUiFromRad(tf.world_rpy.x, uiState->angle_unit_deg);
+                const float rpy_y = AngleUiFromRad(tf.world_rpy.y, uiState->angle_unit_deg);
+                const float rpy_z = AngleUiFromRad(tf.world_rpy.z, uiState->angle_unit_deg);
+                if (uiState->angle_unit_deg) {
+                    ImGui::Text("%.2f,%.2f,%.2f | %.0f,%.0f,%.0f", tf.world_position.x, tf.world_position.y, tf.world_position.z, rpy_x,
+                                rpy_y, rpy_z);
+                } else {
+                    ImGui::Text("%.2f,%.2f,%.2f | %.3f,%.3f,%.3f", tf.world_position.x, tf.world_position.y, tf.world_position.z, rpy_x,
+                                rpy_y, rpy_z);
+                }
             }
             ImGui::EndTable();
         }
@@ -1530,12 +1765,13 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // Path Planner Panel
     // ------------------------------------------------------------------
-    void RenderPathPlannerPanel(PathPlannerUiState* ui, DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene,
-                                teleop_viewer::IkSolver* solver,
+    void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* ui, DebugPlaybackState* playbackState,
+                                teleop_viewer::RobotScene* scene, teleop_viewer::IkSolver* solver,
                                 const std::vector<teleop_viewer::IkChainStatus>& chains) {
-        if (ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
+        if (uiState == nullptr || ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
             return;
         }
+        const bool use_deg = uiState->angle_unit_deg;
 
         if (!ImGui::CollapsingHeader("路径规划", ImGuiTreeNodeFlags_DefaultOpen)) {
             return;
@@ -1588,8 +1824,13 @@ namespace kinematic_viewer {
             ui->square_points = std::max(4, ui->square_points);
         } else if (ui->selected_path_type == 2) {
             ImGui::TextUnformatted("头部往复参数");
-            ImGui::InputFloat("俯仰幅度 (deg)", &ui->head_pitch_amp_deg, 1.0f, 5.0f, "%.1f");
-            ui->head_pitch_amp_deg = std::max(1.0f, std::min(ui->head_pitch_amp_deg, 45.0f));
+            float head_pitch_ui = AngleUiFromDegStored(ui->head_pitch_amp_deg, use_deg);
+            char head_pitch_label[40];
+            std::snprintf(head_pitch_label, sizeof(head_pitch_label), "俯仰幅度 (%s)", AngleUnitLabel(use_deg));
+            ImGui::InputFloat(head_pitch_label, &head_pitch_ui, use_deg ? 1.0f : 0.02f, use_deg ? 5.0f : 0.1f,
+                              AngleInputFormat(use_deg));
+            head_pitch_ui          = std::max(use_deg ? 1.0f : glm::radians(1.0f), std::min(head_pitch_ui, use_deg ? 45.0f : glm::radians(45.0f)));
+            ui->head_pitch_amp_deg = AngleUiToDegStored(head_pitch_ui, use_deg);
             ImGui::InputFloat("周期 (s)", &ui->head_period, 0.5f, 1.0f, "%.1f");
             ui->head_period = std::max(0.1f, ui->head_period);
             ImGui::InputInt("采样点数", &ui->head_points);
@@ -1603,6 +1844,9 @@ namespace kinematic_viewer {
             ui->straight_max_acc = std::max(0.01f, ui->straight_max_acc);
         } else if (ui->selected_path_type == 4) {
             ImGui::TextUnformatted("关节空间PTP参数");
+            if (use_deg) {
+                ImGui::TextDisabled("角速度/角加速度限幅仍为 rad/s（工程惯例）");
+            }
             ImGui::InputFloat("最大速度 (rad/s)", &ui->ptp_max_vel, 0.1f, 0.5f, "%.2f");
             ui->ptp_max_vel = std::max(0.01f, ui->ptp_max_vel);
             ImGui::InputFloat("最大加速度 (rad/s^2)", &ui->ptp_max_acc, 0.1f, 0.5f, "%.2f");
@@ -1618,15 +1862,18 @@ namespace kinematic_viewer {
             auto joints = scene->getJointInfos();
             if (!joints.empty()) {
                 ImGui::Separator();
-                ImGui::TextUnformatted("各关节目标偏移 (rad)");
+                ImGui::Text("各关节目标偏移 (%s)", AngleUnitLabel(use_deg));
                 if (ui->ptp_goal_offsets.size() != joints.size()) {
                     ui->ptp_goal_offsets.resize(joints.size(), 0.0f);
                 }
                 for (size_t i = 0; i < joints.size(); ++i) {
                     ImGui::PushID(static_cast<int>(i));
-                    float offset_deg = glm::degrees(ui->ptp_goal_offsets[i]);
-                    if (ImGui::DragFloat(joints[i].name.c_str(), &offset_deg, 0.5f, -180.0f, 180.0f, "%.1f deg")) {
-                        ui->ptp_goal_offsets[i] = glm::radians(offset_deg);
+                    float offset_ui = AngleUiFromRad(ui->ptp_goal_offsets[i], use_deg);
+                    char offset_fmt[16];
+                    std::snprintf(offset_fmt, sizeof(offset_fmt), "%s %s", AngleInputFormat(use_deg), AngleUnitLabel(use_deg));
+                    if (ImGui::DragFloat(joints[i].name.c_str(), &offset_ui, use_deg ? 0.5f : 0.01f, AngleDragMin(use_deg),
+                                         AngleDragMax(use_deg), offset_fmt)) {
+                        ui->ptp_goal_offsets[i] = AngleUiToRad(offset_ui, use_deg);
                     }
                     ImGui::PopID();
                 }

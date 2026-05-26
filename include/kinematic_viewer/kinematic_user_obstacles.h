@@ -33,7 +33,7 @@ namespace kinematic_viewer {
     void DrawUserObstacles(GLuint mesh_shader, const UserObstacleState& obstacles, const UserObstacleGpuMeshes& gpu, const glm::mat4& view,
                            const glm::mat4& projection);
 
-    void RenderUserObstaclePanel(UserObstacleState* obstacles);
+    void RenderUserObstaclePanel(UserObstacleState* obstacles, bool angle_unit_deg = true);
 
     void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const teleop_viewer::RobotScene& scene,
                                                float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result);

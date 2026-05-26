@@ -17,12 +17,17 @@ namespace kinematic_viewer {
     }
 
     inline bool SidebarPageShowsLinkInspector(int sidebar_page) {
-        return sidebar_page == 0 || sidebar_page == 4 || sidebar_page == 5;
+        // 关节页留给关节表，不叠 Link 检查器
+        return sidebar_page == 0 || sidebar_page == 5;
     }
 
     inline ImVec2 SidebarListSize(float preferred_height, float min_height = 100.0f) {
         const float h = std::max(min_height, preferred_height);
         return ImVec2(0.0f, h);
+    }
+
+    inline ImVec2 SidebarTableFillHeight(float min_height = 320.0f) {
+        return ImVec2(0.0f, std::max(min_height, ImGui::GetContentRegionAvail().y - 4.0f));
     }
 
     inline void BeginSidebarScrollRegion(const char* id) {
@@ -72,6 +77,13 @@ namespace kinematic_viewer {
     inline bool SidebarSliderFloat(const char* label, float* v, float min_v, float max_v, const char* fmt) {
         PushSidebarFullWidth();
         const bool changed = ImGui::SliderFloat(label, v, min_v, max_v, fmt);
+        PopSidebarWidth();
+        return changed;
+    }
+
+    inline bool SidebarSliderFloatNoInput(const char* label, float* v, float min_v, float max_v) {
+        PushSidebarFullWidth();
+        const bool changed = ImGui::SliderFloat(label, v, min_v, max_v, "", ImGuiSliderFlags_NoInput);
         PopSidebarWidth();
         return changed;
     }

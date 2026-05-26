@@ -12,6 +12,7 @@
 
 #include "imgui.h"
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace kinematic_viewer {
@@ -220,6 +222,46 @@ namespace kinematic_viewer {
         using kinematic_viewer::FormatFileSize;
         using kinematic_viewer::FormatFileTime;
 
+        bool TrajectoryPathAlreadyInList(const DebugPlaybackState& playbackState, const std::string& path) {
+            const std::string normalized = NormalizePath(path);
+            for (const auto& entry : playbackState.trajectory_files) {
+                if (NormalizePath(entry.path) == normalized) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        int AddTrajectoryPathsToPlayback(DebugPlaybackState* playbackState, const std::vector<std::string>& paths,
+                                         bool select_and_load_last) {
+            if (playbackState == nullptr || paths.empty()) {
+                return 0;
+            }
+            int added_count     = 0;
+            int last_added_index = -1;
+            for (const std::string& path : paths) {
+                const std::string normalized = NormalizePath(path);
+                if (TrajectoryPathAlreadyInList(*playbackState, normalized)) {
+                    continue;
+                }
+                TrajectoryFileEntry newEntry;
+                newEntry.path   = normalized;
+                newEntry.status = "未加载";
+                newEntry.loaded = false;
+                playbackState->trajectory_files.push_back(std::move(newEntry));
+                last_added_index = static_cast<int>(playbackState->trajectory_files.size()) - 1;
+                ++added_count;
+            }
+            if (added_count > 0 && select_and_load_last && last_added_index >= 0) {
+                playbackState->selected_trajectory_index = last_added_index;
+                std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s",
+                              playbackState->trajectory_files[last_added_index].path.c_str());
+                playbackState->pending_trajectory_load_index      = last_added_index;
+                playbackState->pending_trajectory_play_after_load = false;
+            }
+            return added_count;
+        }
+
         void RenderTrajectoryFileBrowser(DebugPlaybackState* playbackState) {
             if (playbackState == nullptr) {
                 return;
@@ -239,11 +281,9 @@ namespace kinematic_viewer {
             static std::vector<DirEntry> s_cached_entries;
             static bool s_force_refresh = false;
             static bool s_has_scan_error = false;
+            static std::unordered_set<std::string> s_selected_paths;
 
             if (ImGui::Button("浏览本地文件")) {
-                const std::string defaultDir = NormalizePath(std::filesystem::current_path().string());
-                std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir), "%s",
-                              defaultDir.c_str());
                 s_force_refresh = true;
                 ImGui::OpenPopup("trajectory_file_browser_popup");
             }
@@ -379,33 +419,35 @@ namespace kinematic_viewer {
             if (s_has_scan_error) {
                 ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "目录不可用");
             } else {
-                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(0, -38), true)) {
+                if (ImGui::BeginChild("trajectory_file_browser_list", ImVec2(0, -72), true)) {
                     ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-                    if (ImGui::BeginTable("file_browser_table", 3, tableFlags)) {
+                    if (ImGui::BeginTable("file_browser_table", 4, tableFlags)) {
+                        ImGui::TableSetupColumn("选", ImGuiTableColumnFlags_WidthFixed, 28.0f);
                         ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch, 3.5f);
                         ImGui::TableSetupColumn("大小", ImGuiTableColumnFlags_WidthStretch, 1.0f);
                         ImGui::TableSetupColumn("修改时间", ImGuiTableColumnFlags_WidthStretch, 1.5f);
                         ImGui::TableHeadersRow();
 
-                        // Clickable headers for sorting
-                        for (int col = 0; col < 3; ++col) {
+                        // Clickable headers for sorting (skip checkbox column)
+                        for (int col = 1; col < 4; ++col) {
                             ImGui::TableSetColumnIndex(col);
                             const char* labels[3]           = {"名称", "大小", "修改时间"};
                             const FileBrowserSortBy asc[3]  = {FileBrowserSortBy::NameAsc, FileBrowserSortBy::SizeAsc,
                                                                FileBrowserSortBy::TimeAsc};
                             const FileBrowserSortBy desc[3] = {FileBrowserSortBy::NameDesc, FileBrowserSortBy::SizeDesc,
                                                                FileBrowserSortBy::TimeDesc};
-                            bool is_asc                     = (s_sort_by == asc[col]);
-                            bool is_desc                    = (s_sort_by == desc[col]);
+                            const int sort_col              = col - 1;
+                            bool is_asc                     = (s_sort_by == asc[sort_col]);
+                            bool is_desc                    = (s_sort_by == desc[sort_col]);
                             const char* arrow               = is_asc ? "▲" : (is_desc ? "▼" : "");
                             char buf[32];
-                            std::snprintf(buf, sizeof(buf), "%s %s", labels[col], arrow);
+                            std::snprintf(buf, sizeof(buf), "%s %s", labels[sort_col], arrow);
                             ImGui::TableHeader(buf);
                             if (ImGui::IsItemClicked()) {
                                 if (is_asc) {
-                                    s_sort_by = desc[col];
+                                    s_sort_by = desc[sort_col];
                                 } else {
-                                    s_sort_by = asc[col];
+                                    s_sort_by = asc[sort_col];
                                 }
                                 s_force_refresh = true;
                             }
@@ -413,36 +455,53 @@ namespace kinematic_viewer {
 
                         for (const auto& entry : s_cached_entries) {
                             ImGui::TableNextRow();
+                            const std::string abs_path = NormalizePath(entry.path.string());
 
                             ImGui::TableSetColumnIndex(0);
+                            if (entry.isDir) {
+                                ImGui::TextDisabled("-");
+                            } else {
+                                bool checked = s_selected_paths.count(abs_path) > 0;
+                                ImGui::PushID(abs_path.c_str());
+                                if (ImGui::Checkbox("##pick", &checked)) {
+                                    if (checked) {
+                                        s_selected_paths.insert(abs_path);
+                                    } else {
+                                        s_selected_paths.erase(abs_path);
+                                    }
+                                }
+                                ImGui::PopID();
+                            }
+
+                            ImGui::TableSetColumnIndex(1);
                             std::string displayName = entry.isDir ? ("[DIR] " + entry.name) : entry.name;
+                            const bool row_selected = !entry.isDir && s_selected_paths.count(abs_path) > 0;
                             ImGui::PushStyleColor(ImGuiCol_Text,
                                                   entry.isDir ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                            if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+                            const ImGuiSelectableFlags row_flags =
+                                ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick;
+                            if (ImGui::Selectable(displayName.c_str(), row_selected, row_flags)) {
                                 if (entry.isDir) {
                                     std::snprintf(playbackState->trajectory_browser_dir, sizeof(playbackState->trajectory_browser_dir),
-                                                  "%s", entry.path.string().c_str());
-                                } else {
-                                    // Add to trajectory file list instead of replacing single path
-                                    TrajectoryFileEntry newEntry;
-                                    newEntry.path   = entry.path.string();
-                                    newEntry.status = "未加载";
-                                    newEntry.loaded = false;
-                                    playbackState->trajectory_files.push_back(std::move(newEntry));
-                                    playbackState->selected_trajectory_index = static_cast<int>(playbackState->trajectory_files.size()) - 1;
-                                    std::snprintf(playbackState->trajectory_file_path, sizeof(playbackState->trajectory_file_path), "%s",
-                                                  entry.path.string().c_str());
-                                    playbackState->pending_trajectory_load_index      = playbackState->selected_trajectory_index;
-                                    playbackState->pending_trajectory_play_after_load = false;
+                                                  "%s", abs_path.c_str());
+                                } else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                                    AddTrajectoryPathsToPlayback(playbackState, {abs_path}, true);
+                                    s_selected_paths.erase(abs_path);
                                     ImGui::CloseCurrentPopup();
+                                } else {
+                                    if (s_selected_paths.count(abs_path) > 0) {
+                                        s_selected_paths.erase(abs_path);
+                                    } else {
+                                        s_selected_paths.insert(abs_path);
+                                    }
                                 }
                             }
                             ImGui::PopStyleColor();
 
-                            ImGui::TableSetColumnIndex(1);
+                            ImGui::TableSetColumnIndex(2);
                             ImGui::TextDisabled("%s", entry.size.c_str());
 
-                            ImGui::TableSetColumnIndex(2);
+                            ImGui::TableSetColumnIndex(3);
                             ImGui::TextDisabled("%s", entry.mtime.c_str());
                         }
                         ImGui::EndTable();
@@ -451,15 +510,113 @@ namespace kinematic_viewer {
                 }
             }
 
+            auto addSelectedPaths = [&](bool close_popup) {
+                std::vector<std::string> paths;
+                paths.reserve(s_selected_paths.size());
+                for (const auto& path : s_selected_paths) {
+                    paths.push_back(path);
+                }
+                std::sort(paths.begin(), paths.end());
+                if (AddTrajectoryPathsToPlayback(playbackState, paths, true) > 0) {
+                    s_selected_paths.clear();
+                    if (close_popup) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+            };
+
+            const int selected_count = static_cast<int>(s_selected_paths.size());
+            char add_selected_label[48];
+            std::snprintf(add_selected_label, sizeof(add_selected_label), "添加选中(%d)", selected_count);
+            ImGui::BeginDisabled(selected_count == 0);
+            if (ImGui::Button(add_selected_label)) {
+                addSelectedPaths(false);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("添加并关闭")) {
+                addSelectedPaths(true);
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("全选")) {
+                for (const auto& entry : s_cached_entries) {
+                    if (!entry.isDir) {
+                        s_selected_paths.insert(NormalizePath(entry.path.string()));
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("清除选择")) {
+                s_selected_paths.clear();
+            }
+            ImGui::SameLine();
             if (ImGui::Button("关闭")) {
                 ImGui::CloseCurrentPopup();
             }
+            ImGui::TextDisabled("单击切换选中；双击单个文件可立即添加并关闭");
             ImGui::EndPopup();
+        }
+
+        void FillMobileBasePoseInput(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
+            if (uiState == nullptr || scene == nullptr) {
+                return;
+            }
+            float base_x_m = 0.0f;
+            float base_y_m = 0.0f;
+            float base_yaw = 0.0f;
+            if (!scene->getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
+                return;
+            }
+            std::string text;
+            if (uiState->mobile_base_pose_input_format == 1) {
+                const glm::vec3 pos(base_x_m, base_y_m, 0.0f);
+                const glm::quat quat = glm::angleAxis(base_yaw, glm::vec3(0.0f, 0.0f, 1.0f));
+                text = FormatPoseInputXyzQuat(pos, quat);
+            } else {
+                text = FormatPoseInputXyYaw(base_x_m, base_y_m, base_yaw, uiState->mobile_base_yaw_unit_deg);
+            }
+            std::snprintf(uiState->mobile_base_pose_input, sizeof(uiState->mobile_base_pose_input), "%s", text.c_str());
+        }
+
+        bool ApplyMobileBasePoseInput(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
+            if (uiState == nullptr || scene == nullptr) {
+                return false;
+            }
+            if (uiState->mobile_base_pose_input_format == 1) {
+                glm::vec3 parsed_pos(0.0f);
+                glm::quat parsed_quat(1.0f, 0.0f, 0.0f, 0.0f);
+                std::string parse_error;
+                if (!ParsePoseInputXyzQuat(uiState->mobile_base_pose_input, &parsed_pos, &parsed_quat, &parse_error)) {
+                    uiState->mobile_base_pose_input_status = "应用失败: " + parse_error;
+                    return false;
+                }
+                const glm::mat3 rot_mat(parsed_quat);
+                const float yaw_rad = std::atan2(rot_mat[0][1], rot_mat[0][0]);
+                scene->setVirtualBasePose2D(parsed_pos.x, parsed_pos.y, yaw_rad);
+                uiState->mobile_base_pose_input_status = "已应用 (平面: x,y,yaw; z/roll/pitch 不生效)";
+                return true;
+            }
+
+            float parsed_x = 0.0f;
+            float parsed_y = 0.0f;
+            float parsed_yaw = 0.0f;
+            std::string parse_error;
+            if (!ParsePoseInputXyYaw(uiState->mobile_base_pose_input, &parsed_x, &parsed_y, &parsed_yaw,
+                                     uiState->mobile_base_yaw_unit_deg, &parse_error)) {
+                uiState->mobile_base_pose_input_status = "应用失败: " + parse_error;
+                return false;
+            }
+            scene->setVirtualBasePose2D(parsed_x, parsed_y, parsed_yaw);
+            uiState->mobile_base_pose_input_status =
+                std::string("已应用: x=") + std::to_string(parsed_x) + " y=" + std::to_string(parsed_y) + " yaw=" +
+                (uiState->mobile_base_yaw_unit_deg ? std::to_string(glm::degrees(parsed_yaw)) + "°"
+                                                   : std::to_string(parsed_yaw) + " rad");
+            return true;
         }
 
     }  // namespace kinematic_sidebar_panels_internal
 
-    void RenderScenePanel(ViewerState* uiState) {
+    void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
         if (uiState == nullptr) {
             return;
         }
@@ -471,6 +628,57 @@ namespace kinematic_viewer {
         SidebarCheckboxRow4("关节轴", &uiState->show_axes, "仅旋转轴", &uiState->show_revolute_only, "非旋转轴",
                               &uiState->show_non_revolute, "世界轴", &uiState->show_world_axes);
         ImGui::Checkbox("固定底座", &uiState->lock_base);
+        ImGui::Checkbox("Link悬停高亮", &uiState->enable_link_hover_highlight);
+        if (uiState->mobile_base_drag_available) {
+            if (ImGui::Checkbox("底盘拖动Gizmo", &uiState->mobile_base_drag_enabled) && uiState->mobile_base_drag_enabled) {
+                uiState->lock_base = false;
+            }
+            if (uiState->mobile_base_drag_enabled) {
+                SidebarRadioRow3("底盘模式", &uiState->mobile_base_gizmo_operation, "平移", "旋转", "全");
+                if (scene != nullptr) {
+                    float base_x_m = 0.0f;
+                    float base_y_m = 0.0f;
+                    float base_yaw = 0.0f;
+                    if (scene->getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
+                        ImGui::Text("底盘位姿: x=%.3f m  y=%.3f m  yaw=%.1f°", base_x_m, base_y_m, glm::degrees(base_yaw));
+                    }
+                }
+                ImGui::Separator();
+                ImGui::TextUnformatted("底盘位姿手动输入");
+                ImGui::RadioButton("x,y,yaw##base_fmt_xy_yaw", &uiState->mobile_base_pose_input_format, 0);
+                ImGui::SameLine();
+                ImGui::RadioButton("x,y,z,qx,qy,qz,qw##base_fmt_xyz_quat", &uiState->mobile_base_pose_input_format, 1);
+                if (uiState->mobile_base_pose_input_format == 0) {
+                    int yaw_unit = uiState->mobile_base_yaw_unit_deg ? 1 : 0;
+                    ImGui::RadioButton("Yaw: deg##base_yaw_unit", &yaw_unit, 1);
+                    ImGui::SameLine();
+                    ImGui::RadioButton("Yaw: rad##base_yaw_unit", &yaw_unit, 0);
+                    uiState->mobile_base_yaw_unit_deg = (yaw_unit == 1);
+                }
+                const char* input_label = (uiState->mobile_base_pose_input_format == 1) ? "x,y,z,qx,qy,qz,qw##base_pose_input"
+                                                                                        : "x,y,yaw##base_pose_input";
+                if (uiState->mobile_base_pose_input[0] == '\0') {
+                    kinematic_sidebar_panels_internal::FillMobileBasePoseInput(uiState, scene);
+                }
+                PushSidebarFullWidth();
+                ImGui::InputText(input_label, uiState->mobile_base_pose_input, sizeof(uiState->mobile_base_pose_input));
+                PopSidebarWidth();
+                if (ImGui::SmallButton("填充当前")) {
+                    kinematic_sidebar_panels_internal::FillMobileBasePoseInput(uiState, scene);
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("应用") && scene != nullptr) {
+                    uiState->lock_base = false;
+                    kinematic_sidebar_panels_internal::ApplyMobileBasePoseInput(uiState, scene);
+                }
+                if (!uiState->mobile_base_pose_input_status.empty()) {
+                    ImGui::TextWrapped("%s", uiState->mobile_base_pose_input_status.c_str());
+                }
+                ImGui::TextDisabled("在左侧3D视窗：绿色圆环处拖动 Gizmo（仅“场景”页）");
+            }
+        } else {
+            ImGui::TextDisabled("当前机器人未启用底盘拖动（见配置 ui.mobile_base_robots）");
+        }
         if (ImGui::TreeNode("轴与网格")) {
             SidebarSliderFloat("轴长", &uiState->axis_length, 0.03f, 0.5f, "%.3f");
             SidebarSliderFloat("线宽", &uiState->axis_line_width, 1.0f, 6.0f, "%.1f");

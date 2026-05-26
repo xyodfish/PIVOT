@@ -144,6 +144,8 @@ namespace kinematic_viewer {
             ReadScalar(root["ui"], "cjk_font_path", cfg.ui.cjk_font_path);
             ReadScalar(root["ui"], "cjk_font_size", cfg.ui.cjk_font_size);
             ReadScalar(root["ui"], "theme_preset", cfg.ui.theme_preset);
+            ReadScalar(root["ui"], "enable_mobile_base_drag", cfg.ui.enable_mobile_base_drag);
+            ReadStringListFromItem(root["ui"], "mobile_base_robots", cfg.ui.mobile_base_robots);
 
             ReadScalar(root["ik"], "mode", cfg.ik.mode);
             ReadScalar(root["ik"], "full_body_backend", cfg.ik.full_body_backend);
@@ -174,6 +176,7 @@ namespace kinematic_viewer {
 
             ReadStringListFromItem(root["playback"], "trajectory_files", cfg.playback.trajectory_files);
             ReadScalar(root["playback"], "selected_index", cfg.playback.selected_index);
+            ReadScalar(root["playback"], "last_browser_dir", cfg.playback.last_browser_dir);
 
             ok = true;
         } catch (const std::exception& e) {

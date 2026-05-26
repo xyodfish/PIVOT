@@ -37,11 +37,19 @@ find_package(qpOASES QUIET)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ROSCPP REQUIRED IMPORTED_TARGET roscpp)
 
-find_library(YAMLCPP_LIBRARY NAMES yaml-cpp PATHS /usr/lib/x86_64-linux-gnu /usr/local/lib /opt/galbot/devel/${ARCH_FREFIX}/lib)
-if(NOT YAMLCPP_LIBRARY)
-    message(FATAL_ERROR "libyaml-cpp not found; install libyaml-cpp-dev or set YAMLCPP_LIBRARY")
+# Match aphropm_cplanner: use yaml-cpp from ROOT_DEVEL (0.7), not system /usr (0.6).
+find_package(yaml-cpp REQUIRED)
+if(NOT TARGET yaml-cpp)
+    find_library(YAMLCPP_LIBRARY NAMES yaml-cpp yaml-cpp.so.0.7
+                 PATHS ${ROOT_DEVEL_ARCH_PATH}/lib NO_DEFAULT_PATH)
+    if(NOT YAMLCPP_LIBRARY)
+        message(FATAL_ERROR "libyaml-cpp not found under ${ROOT_DEVEL_ARCH_PATH}/lib")
+    endif()
+    add_library(yaml-cpp UNKNOWN IMPORTED)
+    set_target_properties(yaml-cpp PROPERTIES IMPORTED_LOCATION "${YAMLCPP_LIBRARY}")
+    set_target_properties(yaml-cpp PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${ROOT_DEVEL_ARCH_PATH}/include")
 endif()
-find_path(YAMLCPP_INCLUDE_DIR yaml-cpp/yaml.h PATHS /usr/include /usr/local/include /opt/galbot/devel/${ARCH_FREFIX}/include)
 
 if(TARGET TinyXML2::TinyXML2 AND NOT TARGET tinyxml2::tinyxml2)
     add_library(tinyxml2::tinyxml2 ALIAS TinyXML2::TinyXML2)
@@ -56,15 +64,15 @@ endif()
 
 if(NOT qpOASES_FOUND)
     find_library(QPOASES_LIBRARY NAMES qpOASES
-                 PATHS /opt/galbot/devel_control/${ARCH_FREFIX}/lib
-                       /opt/galbot/devel_control/${ARCH_PREFIX}/lib
-                       /opt/galbot/devel_control/x86_64-Linux-GNU-9.4.0/lib)
+                 PATHS /opt/galbot/devel/${ARCH_FREFIX}/lib
+                       /opt/galbot/devel/${ARCH_PREFIX}/lib
+                       /opt/galbot/devel/x86_64-Linux-GNU-9.4.0/lib)
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/lib")
+set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib")
 set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
 
 add_subdirectory(deps/imgui)
@@ -149,7 +157,6 @@ target_include_directories(robot_kinematic_viewer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik"
     /opt/ros/noetic/include
     ${trac_ik_INCLUDE_DIR}
-    ${YAMLCPP_INCLUDE_DIR}
 )
 
 target_link_libraries(robot_kinematic_viewer PRIVATE
@@ -168,7 +175,7 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     glfw
     GLEW::GLEW
     PkgConfig::ROSCPP
-    ${YAMLCPP_LIBRARY}
+    yaml-cpp
     pthread
     ${CMAKE_DL_LIBS}
 )

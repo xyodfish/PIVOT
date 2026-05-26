@@ -59,6 +59,9 @@ namespace teleop_viewer {
         std::string cjk_font_path = "";
         float cjk_font_size       = 18.0f;
         std::string theme_preset  = "current_dark";  // current_dark | moonlight | spectrum_light
+        // Enable planar chassis gizmo only for robots matched by keywords.
+        bool enable_mobile_base_drag                = true;
+        std::vector<std::string> mobile_base_robots = {"galbot_g1"};
     };
 
     struct ViewerIkChainConfig {

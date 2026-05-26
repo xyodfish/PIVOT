@@ -1,6 +1,9 @@
 #include "kinematic_viewer/kinematic_string_utils.h"
 
+#include <glm/gtc/constants.hpp>
+
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstdio>
 #include <iomanip>
@@ -101,6 +104,45 @@ namespace kinematic_viewer {
         const glm::quat q = glm::normalize(quat);
         char buf[196];
         std::snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f", pos.x, pos.y, pos.z, q.x, q.y, q.z, q.w);
+        return std::string(buf);
+    }
+
+    bool ParsePoseInputXyYaw(const char* text, float* out_x, float* out_y, float* out_yaw, bool yaw_is_deg,
+                             std::string* out_error) {
+        if (text == nullptr || out_x == nullptr || out_y == nullptr || out_yaw == nullptr) {
+            if (out_error != nullptr) {
+                *out_error = "输入为空";
+            }
+            return false;
+        }
+        float x = 0.0f, y = 0.0f, yaw = 0.0f;
+        int consumed      = 0;
+        const int matched = std::sscanf(text, " %f , %f , %f %n", &x, &y, &yaw, &consumed);
+        if (matched != 3) {
+            if (out_error != nullptr) {
+                *out_error = "格式错误，应为 x,y,yaw";
+            }
+            return false;
+        }
+        if (text[consumed] != '\0') {
+            if (out_error != nullptr) {
+                *out_error = "格式错误：包含多余字符";
+            }
+            return false;
+        }
+        *out_x   = x;
+        *out_y   = y;
+        *out_yaw = yaw_is_deg ? glm::radians(yaw) : yaw;
+        return true;
+    }
+
+    std::string FormatPoseInputXyYaw(float x, float y, float yaw_rad, bool yaw_as_deg) {
+        char buf[128];
+        if (yaw_as_deg) {
+            std::snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f", x, y, glm::degrees(yaw_rad));
+        } else {
+            std::snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f", x, y, yaw_rad);
+        }
         return std::string(buf);
     }
 

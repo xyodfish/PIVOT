@@ -166,10 +166,28 @@ namespace robot_kinematic_viewer_internal {
         return true;
     }
 
+    std::string ToLowerCopy(std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return text;
+    }
+
+    bool IsMobileBaseDragRobot(const std::string& urdf_path, const std::vector<std::string>& keywords) {
+        const std::string urdf_name_lc = ToLowerCopy(kinematic_viewer::PathBasename(urdf_path));
+        for (const auto& keyword_raw : keywords) {
+            const std::string keyword_lc = ToLowerCopy(keyword_raw);
+            if (!keyword_lc.empty() && urdf_name_lc.find(keyword_lc) != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }  // namespace robot_kinematic_viewer_internal
 
 using robot_kinematic_viewer_internal::ComputeWorldRayFromScreen;
 using robot_kinematic_viewer_internal::IntersectRaySphere;
+using robot_kinematic_viewer_internal::IsMobileBaseDragRobot;
 using robot_kinematic_viewer_internal::ObstaclePickRadius;
 
 int main(int argc, char** argv) {
@@ -237,6 +255,9 @@ int main(int argc, char** argv) {
     ViewerState ui_state;
     kinematic_viewer::PathPlannerUiState path_planner_ui;
     ui_state.lock_base         = cfg.ui.fix_base_like_mujoco;
+    ui_state.mobile_base_drag_available =
+        cfg.ui.enable_mobile_base_drag && IsMobileBaseDragRobot(urdf_path, cfg.ui.mobile_base_robots);
+    ui_state.mobile_base_drag_enabled = ui_state.mobile_base_drag_available;
     auto appendJointInputGroup = [&](const std::string& name, const std::vector<std::string>& joint_names) {
         if (joint_names.empty()) {
             return;
@@ -288,6 +309,30 @@ int main(int argc, char** argv) {
             std::clamp(cfg.playback.selected_index, 0, static_cast<int>(playback_state.trajectory_files.size()) - 1);
         std::snprintf(playback_state.trajectory_file_path, sizeof(playback_state.trajectory_file_path), "%s",
                       playback_state.trajectory_files[playback_state.selected_trajectory_index].path.c_str());
+    }
+    {
+        auto isExistingDir = [](const std::string& path) -> bool {
+            std::error_code ec;
+            return std::filesystem::exists(path, ec) && std::filesystem::is_directory(path, ec);
+        };
+        std::string initial_browser_dir;
+        if (!cfg.playback.last_browser_dir.empty() && isExistingDir(cfg.playback.last_browser_dir)) {
+            initial_browser_dir = kinematic_viewer::NormalizePath(cfg.playback.last_browser_dir);
+        } else {
+            const std::string trajectories_dir = kinematic_viewer::NormalizePath("config/trajectories");
+            if (isExistingDir(trajectories_dir)) {
+                initial_browser_dir = trajectories_dir;
+            } else if (!playback_state.trajectory_files.empty()) {
+                initial_browser_dir =
+                    kinematic_viewer::NormalizePath(std::filesystem::path(playback_state.trajectory_files.front().path).parent_path().string());
+            } else {
+                const char* home = std::getenv("HOME");
+                initial_browser_dir = (home != nullptr && home[0] != '\0') ? kinematic_viewer::NormalizePath(home)
+                                                                         : kinematic_viewer::NormalizePath(std::filesystem::current_path().string());
+            }
+        }
+        std::snprintf(playback_state.trajectory_browser_dir, sizeof(playback_state.trajectory_browser_dir), "%s",
+                      initial_browser_dir.c_str());
     }
     kinematic_viewer::PlaybackStateMachine playback_sm(&playback_state);
     CollisionMonitorState collision_state;
@@ -364,6 +409,7 @@ int main(int argc, char** argv) {
     bool obstacle_pick_left_prev  = false;
     bool obstacle_gizmo_was_using = false;
     bool obstacle_gizmo_was_over  = false;
+    bool base_gizmo_was_using     = false;
     kinematic_viewer::KinematicInputHandler input_handler;
     double last_frame_sec = glfwGetTime();
 
@@ -424,7 +470,7 @@ int main(int argc, char** argv) {
         input_ctx.panel_resize_active = ui_state.panel_resize_active;
         input_ctx.ik_gizmo_using      = ik_state.gizmo_was_using;
         input_ctx.ik_gizmo_over       = ik_state.gizmo_was_over;
-        input_ctx.obs_gizmo_using     = obstacle_gizmo_was_using;
+        input_ctx.obs_gizmo_using     = obstacle_gizmo_was_using || base_gizmo_was_using;
         input_ctx.obs_gizmo_over      = obstacle_gizmo_was_over;
         input_ctx.ik_dragging_marker  = ik_state.dragging_marker;
         input_ctx.sidebar_page        = ui_state.sidebar_page;
@@ -525,8 +571,54 @@ int main(int argc, char** argv) {
             obstacle_gizmo_was_over  = false;
         }
 
+        const bool base_edit_active =
+            ui_state.mobile_base_drag_available && ui_state.mobile_base_drag_enabled && ui_state.sidebar_page == 0;
+        if (base_edit_active && !obstacle_edit_active && !ik_state.gizmo_was_using) {
+            float base_x_m = 0.0f;
+            float base_y_m = 0.0f;
+            float base_yaw = 0.0f;
+            if (scene.getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
+                ImGuizmo::SetGizmoSizeClipSpace(0.12f);
+                glm::mat4 base_world = markerWorldMatrix(glm::vec3(base_x_m, base_y_m, 0.0f),
+                                                         glm::vec3(0.0f, 0.0f, glm::degrees(base_yaw)));
+                ImGuizmo::OPERATION base_op = static_cast<ImGuizmo::OPERATION>(ImGuizmo::TRANSLATE | ImGuizmo::ROTATE);
+                if (ui_state.mobile_base_gizmo_operation == 0) {
+                    base_op = ImGuizmo::TRANSLATE;
+                } else if (ui_state.mobile_base_gizmo_operation == 1) {
+                    base_op = ImGuizmo::ROTATE;
+                }
+                glm::mat4 base_delta(1.0f);
+                bool base_manipulated = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), base_op, ImGuizmo::WORLD,
+                                                             glm::value_ptr(base_world), glm::value_ptr(base_delta), nullptr);
+                bool base_using       = ImGuizmo::IsUsing();
+                if (base_manipulated || base_using) {
+                    const glm::vec3 raw_pos = glm::vec3(base_world[3]);
+                    const glm::mat3 rot_mat(base_world);
+                    // Planar yaw about world Z (do not use glm::eulerAngles — unstable for gizmo output).
+                    const float yaw_rad = std::atan2(rot_mat[0][1], rot_mat[0][0]);
+                    float new_x         = raw_pos.x;
+                    float new_y         = raw_pos.y;
+                    float new_yaw       = yaw_rad;
+                    if (ui_state.mobile_base_gizmo_operation == 0) {
+                        new_yaw = base_yaw;
+                    } else if (ui_state.mobile_base_gizmo_operation == 1) {
+                        new_x = base_x_m;
+                        new_y = base_y_m;
+                    }
+                    scene.setVirtualBasePose2D(new_x, new_y, new_yaw);
+                }
+                base_gizmo_was_using = base_using;
+            } else {
+                base_gizmo_was_using = false;
+            }
+        } else {
+            base_gizmo_was_using = false;
+        }
+
         ImGuizmo::SetGizmoSizeClipSpace(ik_state.gizmo_size_clip_space);
-        if (!obstacle_edit_active && ik_state.selected_chain >= 0 && ik_state.selected_chain < static_cast<int>(ik_state.chains.size())) {
+        const bool ik_page_active = (ui_state.sidebar_page == 1);
+        if (ik_page_active && !obstacle_edit_active && !base_gizmo_was_using && ik_state.selected_chain >= 0 &&
+            ik_state.selected_chain < static_cast<int>(ik_state.chains.size())) {
             if (!ik_state.marker_initialized) {
                 ik_controller.LoadActiveMarkerFromTarget(&scene);
             }
@@ -659,9 +751,13 @@ int main(int argc, char** argv) {
             ui_state.user_obstacles.selected_index = obstacle_pick.selected_index;
         }
 
-        auto link_hover = input_handler.UpdateLinkHover(input_ctx, pick_view, pick_proj, &scene, glfwGetTime());
-        if (!link_hover.throttle_skip) {
-            ui_state.hovered_link = link_hover.picked ? link_hover.link_name : std::string();
+        if (ui_state.enable_link_hover_highlight) {
+            auto link_hover = input_handler.UpdateLinkHover(input_ctx, pick_view, pick_proj, &scene, glfwGetTime());
+            if (!link_hover.throttle_skip) {
+                ui_state.hovered_link = link_hover.picked ? link_hover.link_name : std::string();
+            }
+        } else {
+            ui_state.hovered_link.clear();
         }
 
         auto link_pick = input_handler.UpdateLinkPick(input_ctx, pick_view, pick_proj, &scene);
@@ -673,7 +769,7 @@ int main(int argc, char** argv) {
 
         input_ctx.ik_gizmo_using     = ik_state.gizmo_was_using;
         input_ctx.ik_dragging_marker = ik_state.dragging_marker;
-        input_ctx.obs_gizmo_using    = obstacle_gizmo_was_using;
+        input_ctx.obs_gizmo_using    = obstacle_gizmo_was_using || base_gizmo_was_using;
         input_ctx.imgui_wants_mouse  = ImGui::GetIO().WantCaptureMouse;
         input_handler.UpdateCamera(&camera, input_ctx);
 
@@ -866,7 +962,7 @@ int main(int argc, char** argv) {
         }
 
         if (ui_state.sidebar_page == 0) {
-            RenderScenePanel(&ui_state);
+            RenderScenePanel(&ui_state, &scene);
             RenderRobotTreePanel(&ui_state, &scene);
         }
 
@@ -930,6 +1026,7 @@ int main(int argc, char** argv) {
         cfg.playback.trajectory_files.push_back(entry.path);
     }
     cfg.playback.selected_index = playback_state.selected_trajectory_index;
+    cfg.playback.last_browser_dir = playback_state.trajectory_browser_dir;
 
     DestroyUserObstacleGpuMeshes(&obstacle_meshes);
     glDeleteProgram(mesh_shader);

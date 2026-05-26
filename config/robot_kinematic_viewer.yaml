@@ -24,6 +24,9 @@ ui:
   cjk_font_path: ""
   cjk_font_size: 18.0
   theme_preset: "moonlight" # current_dark | moonlight | spectrum_light
+  enable_mobile_base_drag: true
+  # Match URDF filename substrings (case-insensitive), e.g. galbot_one_golf.urdf
+  mobile_base_robots: ["galbot_g1", "galbot_one_golf", "galbot"]
 
 ros:
   enable: false
@@ -70,3 +73,8 @@ ik:
       tip_link: "left_arm_end_effector_mount_link"
       base_link_candidates: ["torso_base_link", "torso_link", "pelvis"]
       tip_link_candidates: ["left_arm_end_effector_mount_link", "left_rubber_hand", "left_wrist_yaw_link"]
+
+playback:
+  trajectory_files: []
+  selected_index: -1
+  last_browser_dir: "config/trajectories"

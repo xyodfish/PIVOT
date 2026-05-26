@@ -40,7 +40,8 @@ namespace kinematic_viewer {
 
     struct KinematicPlaybackConfig {
         std::vector<std::string> trajectory_files;
-        int selected_index = -1;
+        int selected_index      = -1;
+        std::string last_browser_dir;  // remembered trajectory file browser directory
     };
 
     struct KinematicViewerConfig {

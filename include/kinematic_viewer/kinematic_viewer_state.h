@@ -30,6 +30,7 @@ namespace kinematic_viewer {
         bool show_revolute_only             = true;
         bool lock_base                      = true;
         bool show_non_revolute              = false;
+        bool enable_link_hover_highlight    = true;
         float axis_length                   = 0.12f;
         float axis_line_width               = 2.0f;
         float world_axis_length             = 0.4f;
@@ -52,6 +53,13 @@ namespace kinematic_viewer {
         std::vector<JointInputGroup> joint_input_groups;
         std::string joint_group_input_status;
         bool joint_group_input_last_ok = false;
+        bool mobile_base_drag_available = false;
+        bool mobile_base_drag_enabled   = false;
+        int mobile_base_gizmo_operation = 0;  // 0 translate, 1 rotate, 2 universal
+        int mobile_base_pose_input_format = 0;  // 0: x,y,yaw  1: x,y,z,qx,qy,qz,qw
+        bool mobile_base_yaw_unit_deg     = true;
+        char mobile_base_pose_input[256]  = {0};
+        std::string mobile_base_pose_input_status;
         int sidebar_page               = 4;  // 0:场景 1:IK 2:回放 3:安全 4:关节 5:TF 6:障碍
         UserObstacleState user_obstacles;
     };

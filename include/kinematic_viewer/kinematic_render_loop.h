@@ -56,6 +56,7 @@ namespace kinematic_viewer {
         void DrawObstacles(GLuint shader, const Context& ctx, const glm::mat4& view, const glm::mat4& proj);
         void BuildAxisVertices(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildMarkerAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);
+        void BuildMobileBaseAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildGridLines(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildWorldAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildJointAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);

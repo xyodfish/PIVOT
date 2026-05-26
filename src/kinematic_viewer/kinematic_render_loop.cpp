@@ -1,5 +1,6 @@
 #include "kinematic_viewer/kinematic_render_loop.h"
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -74,6 +75,7 @@ namespace kinematic_viewer {
     void KinematicRenderLoop::BuildAxisVertices(const Context& ctx, std::vector<KinematicLineVertex>* out) {
         BuildGridLines(ctx, out);
         BuildWorldAxes(ctx, out);
+        BuildMobileBaseAxes(ctx, out);
         BuildJointAxes(ctx, out);
         BuildMarkerAxes(ctx, out);
         BuildCollisionLine(ctx, out);
@@ -163,7 +165,27 @@ namespace kinematic_viewer {
         }
     }
 
+    void KinematicRenderLoop::BuildMobileBaseAxes(const Context& ctx, std::vector<KinematicLineVertex>* out) {
+        if (ctx.ui_state == nullptr || ctx.scene == nullptr || !ctx.ui_state->mobile_base_drag_enabled) {
+            return;
+        }
+        float base_x_m = 0.0f;
+        float base_y_m = 0.0f;
+        float base_yaw = 0.0f;
+        if (!ctx.scene->getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
+            return;
+        }
+        const glm::vec3 base_pos(base_x_m, base_y_m, 0.0f);
+        const glm::vec3 base_rpy_deg(0.0f, 0.0f, glm::degrees(base_yaw));
+        appendMarkerAxes(out, base_pos, base_rpy_deg, 0.22f, true);
+        const glm::vec3 ring_color(0.15f, 0.95f, 0.55f);
+        appendCircle(out, base_pos, glm::vec3(0.0f, 0.0f, 1.0f), 0.25f, ring_color, 48);
+    }
+
     void KinematicRenderLoop::BuildMarkerAxes(const Context& ctx, std::vector<KinematicLineVertex>* out) {
+        if (ctx.ui_state != nullptr && ctx.ui_state->mobile_base_drag_enabled && ctx.ui_state->sidebar_page == 0) {
+            return;
+        }
         for (int i = 0; i < static_cast<int>(ctx.ik_state->marker_targets.size()); ++i) {
             const auto& target = ctx.ik_state->marker_targets[i];
             if (!target.initialized) {
@@ -222,7 +244,8 @@ namespace kinematic_viewer {
             }
         };
 
-        if (!ctx.ui_state->hovered_link.empty() && ctx.ui_state->hovered_link != ctx.ui_state->selected_link) {
+        if (ctx.ui_state->enable_link_hover_highlight && !ctx.ui_state->hovered_link.empty() &&
+            ctx.ui_state->hovered_link != ctx.ui_state->selected_link) {
             drawLinkRing(ctx.ui_state->hovered_link, glm::vec3(1.0f, 0.78f, 0.22f));
         }
         if (!ctx.ui_state->selected_link.empty()) {

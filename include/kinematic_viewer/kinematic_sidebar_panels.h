@@ -15,7 +15,7 @@ namespace kinematic_viewer {
     class KinematicIkController;
     class KinematicRosBridge;
 
-    void RenderScenePanel(ViewerState* uiState);
+    void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene = nullptr);
     void RenderIkPanel(IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
                        teleop_viewer::RobotScene* scene);
     void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,

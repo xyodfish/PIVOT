@@ -39,6 +39,22 @@ pkg_check_modules(ROSCPP REQUIRED IMPORTED_TARGET roscpp)
 
 # Match aphropm_cplanner: use yaml-cpp from ROOT_DEVEL (0.7), not system /usr (0.6).
 find_package(yaml-cpp REQUIRED)
+
+# FFmpeg / libav
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
+    libavcodec
+    libavformat
+    libavutil
+    libswscale
+)
+
+# libgif
+find_library(GIF_LIBRARY NAMES gif libgif)
+find_path(GIF_INCLUDE_DIR NAMES gif_lib.h)
+if(NOT GIF_LIBRARY OR NOT GIF_INCLUDE_DIR)
+    message(FATAL_ERROR "libgif not found. Please install libgif-dev.")
+endif()
 if(NOT TARGET yaml-cpp)
     find_library(YAMLCPP_LIBRARY NAMES yaml-cpp yaml-cpp.so.0.7
                  PATHS ${ROOT_DEVEL_ARCH_PATH}/lib NO_DEFAULT_PATH)
@@ -145,6 +161,7 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_link_kinematics.cpp
     src/kinematic_viewer/kinematic_link_inspector.cpp
     src/kinematic_viewer/kinematic_robot_tree_panel.cpp
+    src/kinematic_viewer/kinematic_video_recorder.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
     deps/glad/glad.c
@@ -157,6 +174,7 @@ target_include_directories(robot_kinematic_viewer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik"
     /opt/ros/noetic/include
     ${trac_ik_INCLUDE_DIR}
+    ${GIF_INCLUDE_DIR}
 )
 
 target_link_libraries(robot_kinematic_viewer PRIVATE
@@ -176,6 +194,8 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     GLEW::GLEW
     PkgConfig::ROSCPP
     yaml-cpp
+    PkgConfig::LIBAV
+    ${GIF_LIBRARY}
     pthread
     ${CMAKE_DL_LIBS}
 )

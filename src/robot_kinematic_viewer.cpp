@@ -24,6 +24,7 @@
 #include "kinematic_viewer/kinematic_ui_feedback.h"
 #include "kinematic_viewer/kinematic_ui_theme.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
+#include "kinematic_viewer/kinematic_video_recorder.h"
 #include "kinematic_viewer/kinematic_viewer_config.h"
 #include "teleop_viewer/ik_solver.h"
 #include "teleop_viewer/scene.h"
@@ -62,6 +63,7 @@ using kinematic_viewer::DebugPlaybackState;
 using kinematic_viewer::DestroyUserObstacleGpuMeshes;
 using kinematic_viewer::distancePointToSegment2D;
 using kinematic_viewer::DrawUserObstacles;
+using kinematic_viewer::FocusCameraOnLink;
 using kinematic_viewer::GetScrollDelta;
 using kinematic_viewer::IkState;
 using kinematic_viewer::InitialPoseApplyResult;
@@ -76,17 +78,16 @@ using kinematic_viewer::KinematicRosBridge;
 using kinematic_viewer::KinematicUiFeedback;
 using kinematic_viewer::KinematicViewerConfig;
 using kinematic_viewer::LaunchConfig;
+using kinematic_viewer::LinkKinematicsAnalyzer;
 using kinematic_viewer::LoadLaunchConfigFromArgs;
 using kinematic_viewer::markerWorldMatrix;
 using kinematic_viewer::MergeUserObstaclesIntoCollisionResult;
-using kinematic_viewer::LinkKinematicsAnalyzer;
 using kinematic_viewer::RenderJointPanel;
-using kinematic_viewer::FocusCameraOnLink;
 using kinematic_viewer::RenderLinkInspectorPanel;
 using kinematic_viewer::RenderObstaclePanel;
 using kinematic_viewer::RenderPlaybackPanel;
-using kinematic_viewer::RenderSafetyPanel;
 using kinematic_viewer::RenderRobotTreePanel;
+using kinematic_viewer::RenderSafetyPanel;
 using kinematic_viewer::RenderScenePanel;
 using kinematic_viewer::RenderTfPanel;
 using kinematic_viewer::TrajectoryPlayer;
@@ -168,8 +169,7 @@ namespace robot_kinematic_viewer_internal {
     }
 
     std::string ToLowerCopy(std::string text) {
-        std::transform(text.begin(), text.end(), text.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
         return text;
     }
 
@@ -230,6 +230,8 @@ int main(int argc, char** argv) {
     KinematicRenderLoop render_loop;
     render_loop.line_renderer = &line_renderer;
 
+    kinematic_viewer::VideoRecorder video_recorder;
+
     UserObstacleGpuMeshes obstacle_meshes;
     if (!InitUserObstacleGpuMeshes(&obstacle_meshes)) {
         std::cerr << "InitUserObstacleGpuMeshes failed\n";
@@ -255,11 +257,10 @@ int main(int argc, char** argv) {
 
     ViewerState ui_state;
     kinematic_viewer::PathPlannerUiState path_planner_ui;
-    ui_state.lock_base         = cfg.ui.fix_base_like_mujoco;
-    ui_state.mobile_base_drag_available =
-        cfg.ui.enable_mobile_base_drag && IsMobileBaseDragRobot(urdf_path, cfg.ui.mobile_base_robots);
-    ui_state.mobile_base_drag_enabled = ui_state.mobile_base_drag_available;
-    auto appendJointInputGroup = [&](const std::string& name, const std::vector<std::string>& joint_names) {
+    ui_state.lock_base                  = cfg.ui.fix_base_like_mujoco;
+    ui_state.mobile_base_drag_available = cfg.ui.enable_mobile_base_drag && IsMobileBaseDragRobot(urdf_path, cfg.ui.mobile_base_robots);
+    ui_state.mobile_base_drag_enabled   = ui_state.mobile_base_drag_available;
+    auto appendJointInputGroup          = [&](const std::string& name, const std::vector<std::string>& joint_names) {
         if (joint_names.empty()) {
             return;
         }
@@ -324,12 +325,13 @@ int main(int argc, char** argv) {
             if (isExistingDir(trajectories_dir)) {
                 initial_browser_dir = trajectories_dir;
             } else if (!playback_state.trajectory_files.empty()) {
-                initial_browser_dir =
-                    kinematic_viewer::NormalizePath(std::filesystem::path(playback_state.trajectory_files.front().path).parent_path().string());
+                initial_browser_dir = kinematic_viewer::NormalizePath(
+                    std::filesystem::path(playback_state.trajectory_files.front().path).parent_path().string());
             } else {
-                const char* home = std::getenv("HOME");
-                initial_browser_dir = (home != nullptr && home[0] != '\0') ? kinematic_viewer::NormalizePath(home)
-                                                                         : kinematic_viewer::NormalizePath(std::filesystem::current_path().string());
+                const char* home    = std::getenv("HOME");
+                initial_browser_dir = (home != nullptr && home[0] != '\0')
+                                          ? kinematic_viewer::NormalizePath(home)
+                                          : kinematic_viewer::NormalizePath(std::filesystem::current_path().string());
             }
         }
         std::snprintf(playback_state.trajectory_browser_dir, sizeof(playback_state.trajectory_browser_dir), "%s",
@@ -516,6 +518,20 @@ int main(int argc, char** argv) {
         render_ctx.show_planned_path = path_planner_ui.show_preview;
         render_loop.Render(render_ctx);
 
+        // Frame capture for video recording
+        if (video_recorder.IsRecording()) {
+            std::vector<uint8_t> pixels(static_cast<size_t>(viewport_w) * viewport_h * 4);
+            glReadPixels(0, 0, viewport_w, viewport_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            // Flip vertically (OpenGL origin is bottom-left)
+            std::vector<uint8_t> flipped(static_cast<size_t>(viewport_w) * viewport_h * 4);
+            for (int y = 0; y < viewport_h; ++y) {
+                int src_row = viewport_h - 1 - y;
+                std::memcpy(flipped.data() + y * viewport_w * 4, pixels.data() + src_row * viewport_w * 4,
+                            static_cast<size_t>(viewport_w) * 4);
+            }
+            video_recorder.SubmitFrame(flipped.data(), viewport_w, viewport_h);
+        }
+
         auto applyIkForActiveChain = [&](bool force_orientation_lock, bool fast_mode, bool prefer_position_only_target) -> bool {
             return ik_controller.ApplyIkForActiveChain(&scene, force_orientation_lock, fast_mode, prefer_position_only_target);
         };
@@ -580,8 +596,8 @@ int main(int argc, char** argv) {
             float base_yaw = 0.0f;
             if (scene.getVirtualBasePose2D(&base_x_m, &base_y_m, &base_yaw)) {
                 ImGuizmo::SetGizmoSizeClipSpace(0.12f);
-                glm::mat4 base_world = markerWorldMatrix(glm::vec3(base_x_m, base_y_m, 0.0f),
-                                                         glm::vec3(0.0f, 0.0f, glm::degrees(base_yaw)));
+                glm::mat4 base_world =
+                    markerWorldMatrix(glm::vec3(base_x_m, base_y_m, 0.0f), glm::vec3(0.0f, 0.0f, glm::degrees(base_yaw)));
                 ImGuizmo::OPERATION base_op = static_cast<ImGuizmo::OPERATION>(ImGuizmo::TRANSLATE | ImGuizmo::ROTATE);
                 if (ui_state.mobile_base_gizmo_operation == 0) {
                     base_op = ImGuizmo::TRANSLATE;
@@ -855,6 +871,177 @@ int main(int argc, char** argv) {
                 ImGui::EndDisabled();
             }
         }
+
+        // Video recording controls
+        if (ImGui::CollapsingHeader("视频录制")) {
+            const char* format_items[] = {"MP4", "GIF"};
+            ImGui::Combo("格式", &ui_state.record_format, format_items, IM_ARRAYSIZE(format_items));
+            ImGui::InputInt("帧率", &ui_state.record_fps);
+            ui_state.record_fps = std::clamp(ui_state.record_fps, 1, 120);
+
+            ImGui::InputText("输出目录", ui_state.record_output_dir, sizeof(ui_state.record_output_dir));
+            ImGui::SameLine();
+            if (ImGui::SmallButton("浏览..")) {
+                ImGui::OpenPopup("record_output_dir_browser");
+            }
+
+            // Directory browser popup (same style as trajectory file browser)
+            {
+                const ImGuiViewport* viewport = ImGui::GetMainViewport();
+                const float popup_w           = std::clamp(viewport->Size.x * 0.55f, 640.0f, 1100.0f);
+                const float popup_h           = std::clamp(viewport->Size.y * 0.60f, 420.0f, 800.0f);
+                ImGui::SetNextWindowSize(ImVec2(popup_w, popup_h), ImGuiCond_Appearing);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f, 380.0f), ImVec2(1400.0f, 1000.0f));
+
+                if (ImGui::BeginPopupModal("record_output_dir_browser", nullptr)) {
+                    static char browser_dir[512] = "";
+                    static std::vector<kinematic_viewer::FileBrowserEntry> s_cached_entries;
+                    static bool s_browser_force_refresh = true;
+
+                    if (browser_dir[0] == '\0') {
+                        const char* home = std::getenv("HOME");
+                        std::snprintf(browser_dir, sizeof(browser_dir), "%s", home ? home : "/");
+                    }
+
+                    bool dir_changed = false;
+                    ImGui::InputText("目录", browser_dir, sizeof(browser_dir));
+                    ImGui::SameLine();
+                    if (ImGui::Button("进入目录")) {
+                        std::string normalized = kinematic_viewer::NormalizePath(browser_dir);
+                        std::snprintf(browser_dir, sizeof(browser_dir), "%s", normalized.c_str());
+                        dir_changed = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("上一级")) {
+                        std::filesystem::path current = std::filesystem::path(kinematic_viewer::NormalizePath(browser_dir));
+                        std::filesystem::path parent  = current.parent_path();
+                        if (parent.empty()) {
+                            parent = std::filesystem::path("/");
+                        }
+                        std::snprintf(browser_dir, sizeof(browser_dir), "%s", parent.string().c_str());
+                        dir_changed = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("根目录/")) {
+                        std::snprintf(browser_dir, sizeof(browser_dir), "%s", "/");
+                        dir_changed = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("HOME")) {
+                        const char* home = std::getenv("HOME");
+                        if (home != nullptr && home[0] != '\0') {
+                            std::snprintf(browser_dir, sizeof(browser_dir), "%s", home);
+                            dir_changed = true;
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("刷新")) {
+                        s_browser_force_refresh = true;
+                    }
+
+                    const std::string normalized_dir = kinematic_viewer::NormalizePath(browser_dir);
+                    if (dir_changed) {
+                        s_browser_force_refresh = true;
+                    }
+
+                    if (s_browser_force_refresh || s_cached_entries.empty()) {
+                        s_browser_force_refresh = false;
+                        s_cached_entries        = kinematic_viewer::ScanDirectoryForBrowser(
+                            normalized_dir, [](const std::filesystem::path&) { return true; },  // show all
+                            kinematic_viewer::FileBrowserSortBy::NameAsc);
+                    }
+
+                    if (ImGui::BeginChild("record_dir_browser_list", ImVec2(0, -48), true)) {
+                        ImGuiTableFlags table_flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+                        if (ImGui::BeginTable("record_dir_table", 3, table_flags)) {
+                            ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch, 3.5f);
+                            ImGui::TableSetupColumn("大小", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                            ImGui::TableSetupColumn("修改时间", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+                            ImGui::TableHeadersRow();
+
+                            for (const auto& entry : s_cached_entries) {
+                                ImGui::TableNextRow();
+                                ImGui::TableSetColumnIndex(0);
+
+                                std::string display_name = entry.is_directory ? ("[DIR] " + entry.name) : entry.name;
+                                ImGui::PushStyleColor(
+                                    ImGuiCol_Text, entry.is_directory ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                                if (ImGui::Selectable(display_name.c_str(), false,
+                                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+                                    if (entry.is_directory) {
+                                        std::string new_dir = normalized_dir + "/" + entry.name;
+                                        std::snprintf(browser_dir, sizeof(browser_dir), "%s",
+                                                      kinematic_viewer::NormalizePath(new_dir).c_str());
+                                        s_browser_force_refresh = true;
+                                    }
+                                }
+                                ImGui::PopStyleColor();
+
+                                ImGui::TableSetColumnIndex(1);
+                                ImGui::TextDisabled("%s", entry.size.c_str());
+                                ImGui::TableSetColumnIndex(2);
+                                ImGui::TextDisabled("%s", entry.mtime.c_str());
+                            }
+                            ImGui::EndTable();
+                        }
+                        ImGui::EndChild();
+                    }
+
+                    if (ImGui::Button("选择当前目录", ImVec2(140, 0))) {
+                        std::snprintf(ui_state.record_output_dir, sizeof(ui_state.record_output_dir), "%s", normalized_dir.c_str());
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("取消", ImVec2(80, 0))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("双击目录进入; 单击选择当前目录");
+                    ImGui::EndPopup();
+                }
+            }
+
+            ImGui::InputText("文件名 (空=自动)", ui_state.record_filename, sizeof(ui_state.record_filename));
+
+            if (video_recorder.IsRecording()) {
+                if (ImGui::Button("停止录制", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+                    video_recorder.StopRecording();
+                    ui_state.is_recording = false;
+                    ui_feedback.Push(UiSemanticLevel::Success, "录制已停止并保存", now_sec, 3.0);
+                }
+                ImGui::TextDisabled("%s", video_recorder.GetStatus().c_str());
+            } else {
+                if (ImGui::Button("开始录制", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+                    std::string out_dir = ui_state.record_output_dir;
+                    if (out_dir.empty()) {
+                        out_dir = kinematic_viewer::VideoRecorder::DefaultOutputDirectory();
+                    }
+                    std::filesystem::create_directories(out_dir);
+                    std::string ext = (ui_state.record_format == 0) ? ".mp4" : ".gif";
+
+                    std::string filename;
+                    if (ui_state.record_filename[0] != '\0') {
+                        filename = ui_state.record_filename;
+                        // Auto-append extension if missing
+                        if (filename.size() < ext.size() || filename.compare(filename.size() - ext.size(), ext.size(), ext) != 0) {
+                            filename += ext;
+                        }
+                    } else {
+                        filename = "recording_" + kinematic_viewer::VideoRecorder::TimestampString() + ext;
+                    }
+                    std::string full_path = out_dir + "/" + filename;
+
+                    auto fmt = (ui_state.record_format == 0) ? kinematic_viewer::VideoRecorder::Format::MP4
+                                                             : kinematic_viewer::VideoRecorder::Format::GIF;
+                    if (video_recorder.StartRecording(full_path, viewport_w, viewport_h, ui_state.record_fps, fmt)) {
+                        ui_state.is_recording = true;
+                        ui_feedback.Push(UiSemanticLevel::Success, "开始录制: " + filename, now_sec, 3.0);
+                    } else {
+                        ui_feedback.Push(UiSemanticLevel::Error, "录制启动失败", now_sec, 4.0);
+                    }
+                }
+            }
+        }
         if (cfg.initial_pose.enable) {
             if (ImGui::Button("加载初始位姿")) {
                 InitialPoseApplyResult result = applyConfiguredInitialPose();
@@ -962,8 +1149,8 @@ int main(int argc, char** argv) {
         ImGui::Separator();
 
         if (kinematic_viewer::SidebarPageShowsLinkInspector(ui_state.sidebar_page)) {
-            RenderLinkInspectorPanel(&ui_state, &scene, &camera, &collision_state, &collision_result, &playback_state,
-                                     &collision_monitor, &link_kinematics_analyzer);
+            RenderLinkInspectorPanel(&ui_state, &scene, &camera, &collision_state, &collision_result, &playback_state, &collision_monitor,
+                                     &link_kinematics_analyzer);
         }
 
         if (ui_state.sidebar_page == 0) {
@@ -972,8 +1159,7 @@ int main(int argc, char** argv) {
         }
 
         auto joints = scene.getJointInfos();
-        kinematic_viewer::TickTrajectorySequence(&playback_state, &playback_sm, was_playback_playing, joints, &trajectory_player,
-                                                   &scene);
+        kinematic_viewer::TickTrajectorySequence(&playback_state, &playback_sm, was_playback_playing, joints, &trajectory_player, &scene);
         if (ui_state.sidebar_page == 4) {
             RenderJointPanel(&ui_state, &scene, joints);
         }
@@ -1040,7 +1226,7 @@ int main(int argc, char** argv) {
     for (const auto& entry : playback_state.trajectory_files) {
         cfg.playback.trajectory_files.push_back(entry.path);
     }
-    cfg.playback.selected_index = playback_state.selected_trajectory_index;
+    cfg.playback.selected_index   = playback_state.selected_trajectory_index;
     cfg.playback.last_browser_dir = playback_state.trajectory_browser_dir;
 
     DestroyUserObstacleGpuMeshes(&obstacle_meshes);

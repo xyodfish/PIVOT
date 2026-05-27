@@ -49,20 +49,27 @@ namespace kinematic_viewer {
         int selected_joint_input_group      = 0;
         std::string selected_link;
         std::string hovered_link;
-        float trajectory_min_surface_m      = -1.0f;
+        float trajectory_min_surface_m = -1.0f;
         std::unordered_map<std::string, float> pose_snapshot;
         std::vector<JointInputGroup> joint_input_groups;
         std::string joint_group_input_status;
-        bool joint_group_input_last_ok = false;
-        bool angle_unit_deg            = true;  // global UI: false = rad
-        bool mobile_base_drag_available = false;
-        bool mobile_base_drag_enabled   = false;
-        int mobile_base_gizmo_operation = 0;  // 0 translate, 1 rotate, 2 universal
+        bool joint_group_input_last_ok    = false;
+        bool angle_unit_deg               = true;  // global UI: false = rad
+        bool mobile_base_drag_available   = false;
+        bool mobile_base_drag_enabled     = false;
+        int mobile_base_gizmo_operation   = 0;  // 0 translate, 1 rotate, 2 universal
         int mobile_base_pose_input_format = 0;  // 0: x,y,yaw  1: x,y,z,qx,qy,qz,qw
-        char mobile_base_pose_input[256] = {0};
+        char mobile_base_pose_input[256]  = {0};
         std::string mobile_base_pose_input_status;
-        int sidebar_page               = 4;  // 0:场景 1:IK 2:回放 3:安全 4:关节 5:TF 6:障碍
+        int sidebar_page = 4;  // 0:场景 1:IK 2:回放 3:安全 4:关节 5:TF 6:障碍 7:规划
         UserObstacleState user_obstacles;
+
+        // Video recording state
+        bool is_recording           = false;
+        int record_format           = 0;  // 0=MP4, 1=GIF
+        int record_fps              = 30;
+        char record_output_dir[512] = "";
+        char record_filename[256]   = "";  // 空则自动生成
     };
 
     struct IkState {

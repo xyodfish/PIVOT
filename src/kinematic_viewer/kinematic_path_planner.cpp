@@ -37,6 +37,35 @@ namespace kinematic_viewer {
                              cr * cp * sy - sr * sp * cy);
         }
 
+        std::vector<vp::KinematicState<double>> planArcLengthWithVp(double total_len, double period_sec, int num_points) {
+            std::vector<vp::KinematicState<double>> samples;
+            if (total_len <= 1e-9 || period_sec <= 1e-6 || num_points < 2) {
+                return samples;
+            }
+
+            vp::BCs<double> bc;
+            bc.start_state.pos = 0.0;
+            bc.start_state.vel = 0.0;
+            bc.start_state.acc = 0.0;
+            bc.goal_state.pos  = total_len;
+            bc.goal_state.vel  = 0.0;
+            bc.goal_state.acc  = 0.0;
+
+            const double avg_vel = total_len / period_sec;
+            bc.max_vel           = std::max(1e-4, avg_vel * 1.5);
+            bc.max_acc           = std::max(1e-4, bc.max_vel * 4.0 / period_sec);
+            bc.max_jerk          = std::max(1e-4, bc.max_acc * 8.0 / period_sec);
+            bc.delta_t           = period_sec / static_cast<double>(num_points);
+
+            std::vector<vp::BCs<double>> bc_vec = {bc};
+            std::shared_ptr<vp::VelocityPlannerInterface<double>> planner = std::make_shared<vp::DoubleSPlanner>(bc_vec, "DSVP");
+            auto kstates = planner->planKStates(false);
+            if (!kstates.empty() && !kstates[0].empty()) {
+                samples = std::move(kstates[0]);
+            }
+            return samples;
+        }
+
     }  // namespace
 
     // ------------------------------------------------------------------
@@ -58,10 +87,19 @@ namespace kinematic_viewer {
             glm::vec3 u, v;
             buildBasisFromNormal(params_.normal, &u, &v);
 
-            const float dt = params_.period_sec / static_cast<float>(params_.num_points);
-            for (int i = 0; i <= params_.num_points; ++i) {
-                float t     = static_cast<float>(i) * dt;
-                float angle = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) / static_cast<float>(params_.num_points);
+            const double total_len = 2.0 * M_PI * static_cast<double>(params_.radius);
+            const auto arc_samples = planArcLengthWithVp(total_len, static_cast<double>(params_.period_sec), params_.num_points);
+
+            if (arc_samples.empty()) {
+                result.status = "错误: vp 规划失败";
+                return result;
+            }
+
+            const double time_scale =
+                (arc_samples.back().time > 1e-9) ? (static_cast<double>(params_.period_sec) / arc_samples.back().time) : 1.0;
+            for (const auto& ks : arc_samples) {
+                const float t     = static_cast<float>(ks.time * time_scale);
+                const float angle = static_cast<float>(2.0 * M_PI * (ks.pos / total_len));
                 CartesianWaypoint wp;
                 wp.time_sec    = t;
                 wp.position    = params_.center + params_.radius * (std::cos(angle) * u + std::sin(angle) * v);
@@ -109,7 +147,14 @@ namespace kinematic_viewer {
             const float straight_len = params_.side_length - 2.0f * r;
             const float arc_len      = static_cast<float>(M_PI) * 0.5f * r;
             const float total_len    = 4.0f * straight_len + 4.0f * arc_len;
-            const float dt           = params_.period_sec / static_cast<float>(params_.num_points);
+            const auto arc_samples =
+                planArcLengthWithVp(static_cast<double>(total_len), static_cast<double>(params_.period_sec), params_.num_points);
+            if (arc_samples.empty()) {
+                result.status = "错误: vp 规划失败";
+                return result;
+            }
+            const double time_scale =
+                (arc_samples.back().time > 1e-9) ? (static_cast<double>(params_.period_sec) / arc_samples.back().time) : 1.0;
 
             auto sampleSquare = [&](float s) -> glm::vec3 {
                 // s in [0, total_len)
@@ -177,9 +222,9 @@ namespace kinematic_viewer {
                 return params_.center + (half - r) * u + (-half + r) * v + r * (std::cos(angle) * u + std::sin(angle) * v);
             };
 
-            for (int i = 0; i <= params_.num_points; ++i) {
-                float t = static_cast<float>(i) * dt;
-                float s = total_len * static_cast<float>(i) / static_cast<float>(params_.num_points);
+            for (const auto& ks : arc_samples) {
+                float t = static_cast<float>(ks.time * time_scale);
+                float s = static_cast<float>(ks.pos);
                 CartesianWaypoint wp;
                 wp.time_sec    = t;
                 wp.position    = sampleSquare(s);
@@ -286,11 +331,14 @@ namespace kinematic_viewer {
                 vp::StraightTrajectory straight_traj(start_pose, goal_pose, {bc}, params_.profile);
                 auto traj = straight_traj.getTrajs();
 
-                for (const auto& point : traj) {
+                const size_t n = traj.size();
+                for (size_t i = 0; i < n; ++i) {
+                    const auto& point = traj[i];
                     CartesianWaypoint wp;
                     wp.time_sec    = static_cast<float>(point[0]);
                     wp.position    = glm::vec3(static_cast<float>(point[1]), static_cast<float>(point[2]), static_cast<float>(point[3]));
-                    wp.orientation = current_quat;
+                    const float ratio = (n > 1) ? static_cast<float>(i) / static_cast<float>(n - 1) : 1.0f;
+                    wp.orientation    = glm::normalize(glm::slerp(params_.start_quat, params_.goal_quat, ratio));
                     result.waypoints.push_back(wp);
                 }
 
@@ -377,14 +425,10 @@ namespace kinematic_viewer {
 
                 // Collect joint positions
                 std::vector<float> positions;
-                positions.reserve(joint_names.size());
-                for (const auto& name : joint_names) {
-                    teleop_viewer::RobotScene::JointInfo info;
-                    if (scene->getJointInfo(name, &info)) {
-                        positions.push_back(info.position);
-                    } else {
-                        positions.push_back(0.0f);
-                    }
+                const auto all_joints = scene->getJointInfos();
+                positions.reserve(all_joints.size());
+                for (const auto& js : all_joints) {
+                    positions.push_back(js.position);
                 }
 
                 times.push_back(wp.time_sec);
@@ -493,14 +537,10 @@ namespace kinematic_viewer {
 
                 // Collect joint positions
                 std::vector<float> positions;
-                positions.reserve(joint_names.size());
-                for (const auto& name : joint_names) {
-                    teleop_viewer::RobotScene::JointInfo info;
-                    if (scene->getJointInfo(name, &info)) {
-                        positions.push_back(info.position);
-                    } else {
-                        positions.push_back(0.0f);
-                    }
+                const auto all_joints = scene->getJointInfos();
+                positions.reserve(all_joints.size());
+                for (const auto& js : all_joints) {
+                    positions.push_back(js.position);
                 }
 
                 times.push_back(wp.time_sec);

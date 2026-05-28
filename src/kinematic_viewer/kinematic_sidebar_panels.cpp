@@ -5,7 +5,6 @@
 #include "kinematic_viewer/kinematic_angle_units.h"
 #include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
-#include "kinematic_viewer/kinematic_ros_bridge.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
 
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
@@ -22,10 +21,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -795,9 +796,8 @@ namespace kinematic_viewer {
         RenderUserObstaclePanel(&uiState->user_obstacles, uiState->angle_unit_deg);
     }
 
-    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
-                       teleop_viewer::RobotScene* scene) {
-        if (uiState == nullptr || ikState == nullptr || ikController == nullptr || rosBridge == nullptr || scene == nullptr) {
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, teleop_viewer::RobotScene* scene) {
+        if (uiState == nullptr || ikState == nullptr || ikController == nullptr || scene == nullptr) {
             return;
         }
         const bool use_deg = uiState->angle_unit_deg;
@@ -839,23 +839,8 @@ namespace kinematic_viewer {
             ikState->full_body_iterations = std::max(1, ikState->full_body_iterations);
             ImGui::TextDisabled("彩色目标轴: 亮色=当前控制链，淡色=其他链");
         }
-        ImGui::Checkbox("使用RViz目标位姿", &ikState->use_external_target);
-        ImGui::TextDisabled("外部位姿topic: %s", ikState->external_target_topic.c_str());
-        if (!ikState->external_target_expected_frame.empty()) {
-            ImGui::TextDisabled("外部位姿frame过滤: %s", ikState->external_target_expected_frame.c_str());
-        } else {
-            ImGui::TextDisabled("外部位姿frame过滤: <未设置>");
-        }
-        if (!rosBridge->enabled()) {
-            ImGui::TextDisabled("外部位姿: ROS 未启用");
-        } else if (ikState->external_target_received) {
-            double now_ros_sec = rosBridge->nowSec();
-            double age_sec     = std::max(0.0, now_ros_sec - ikState->external_target_last_recv_sec);
-            ImGui::Text("外部位姿: 已接收, frame=%s, %.2fs前",
-                        ikState->external_target_last_frame.empty() ? "<empty>" : ikState->external_target_last_frame.c_str(), age_sec);
-        } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.25f, 1.0f), "外部位姿: 未接收到消息");
-        }
+        ikState->use_external_target = false;
+        ImGui::TextDisabled("外部目标位姿输入已禁用（ROS 功能已移除）");
 
         const auto& chain_status = ikState->chains[ikState->selected_chain];
         if (ikState->solve_mode == "single_chain" && !chain_status.ready) {
@@ -1804,7 +1789,12 @@ namespace kinematic_viewer {
         // Parameter panels based on path type
         if (ui->selected_path_type == 0) {
             ImGui::TextUnformatted("圆参数");
-            ImGui::InputFloat3("圆心 (m)", ui->circle_center, "%.3f");
+            ImGui::Checkbox("圆心使用当前末端位置", &ui->circle_center_use_current_tip);
+            if (ui->circle_center_use_current_tip) {
+                ImGui::TextDisabled("圆心将使用当前末端位置");
+            } else {
+                ImGui::InputFloat3("圆心 (m)", ui->circle_center, "%.3f");
+            }
             ImGui::InputFloat("半径 (m)", &ui->circle_radius, 0.01f, 0.05f, "%.3f");
             ui->circle_radius = std::max(0.01f, ui->circle_radius);
             ImGui::InputFloat("周期 (s)", &ui->circle_period, 0.5f, 1.0f, "%.1f");
@@ -1813,7 +1803,12 @@ namespace kinematic_viewer {
             ui->circle_points = std::max(3, ui->circle_points);
         } else if (ui->selected_path_type == 1) {
             ImGui::TextUnformatted("方参数");
-            ImGui::InputFloat3("中心 (m)", ui->square_center, "%.3f");
+            ImGui::Checkbox("方形中心使用当前末端位置", &ui->square_center_use_current_tip);
+            if (ui->square_center_use_current_tip) {
+                ImGui::TextDisabled("方形中心将使用当前末端位置");
+            } else {
+                ImGui::InputFloat3("中心 (m)", ui->square_center, "%.3f");
+            }
             ImGui::InputFloat("边长 (m)", &ui->square_side, 0.01f, 0.05f, "%.3f");
             ui->square_side = std::max(0.01f, ui->square_side);
             ImGui::InputFloat("圆角半径 (m)", &ui->square_corner_r, 0.0f, 0.01f, "%.3f");
@@ -1837,7 +1832,23 @@ namespace kinematic_viewer {
             ui->head_points = std::max(2, ui->head_points);
         } else if (ui->selected_path_type == 3) {
             ImGui::TextUnformatted("直线参数");
-            ImGui::InputFloat3("目标位置 (m)", ui->straight_goal, "%.3f");
+            ImGui::Checkbox("使用相对位移", &ui->straight_use_relative);
+            if (ui->straight_use_relative) {
+                ImGui::InputFloat3("相对位移 Δxyz (m)", ui->straight_offset, "%.3f");
+                ImGui::TextDisabled("目标点 = 当前末端位置 + Δxyz");
+            } else {
+                ImGui::InputFloat3("绝对目标位置 (m)", ui->straight_goal, "%.3f");
+            }
+            float rot_off_ui[3] = {AngleUiFromDegStored(ui->straight_rot_offset_deg[0], use_deg),
+                                   AngleUiFromDegStored(ui->straight_rot_offset_deg[1], use_deg),
+                                   AngleUiFromDegStored(ui->straight_rot_offset_deg[2], use_deg)};
+            char rot_label[64];
+            std::snprintf(rot_label, sizeof(rot_label), "相对旋转 Δrpy (%s)", AngleUnitLabel(use_deg));
+            if (ImGui::InputFloat3(rot_label, rot_off_ui, AngleInputFormat(use_deg))) {
+                ui->straight_rot_offset_deg[0] = AngleUiToDegStored(rot_off_ui[0], use_deg);
+                ui->straight_rot_offset_deg[1] = AngleUiToDegStored(rot_off_ui[1], use_deg);
+                ui->straight_rot_offset_deg[2] = AngleUiToDegStored(rot_off_ui[2], use_deg);
+            }
             ImGui::InputFloat("最大速度 (m/s)", &ui->straight_max_vel, 0.01f, 0.05f, "%.2f");
             ui->straight_max_vel = std::max(0.01f, ui->straight_max_vel);
             ImGui::InputFloat("最大加速度 (m/s^2)", &ui->straight_max_acc, 0.01f, 0.05f, "%.2f");
@@ -1883,7 +1894,15 @@ namespace kinematic_viewer {
         ImGui::Separator();
 
         // Action buttons
-        if (ImGui::Button("生成路径并求解 IK")) {
+        if (ImGui::Button("生成路径并求解 IK") && !ui->planning_pending) {
+            ui->last_status = "开始规划...";
+            ui->planning_pending = true;
+            ui->planning_defer_one_frame = true;
+        }
+
+        if (ui->planning_pending && !ui->planning_defer_one_frame) {
+            const auto plan_begin_time = std::chrono::steady_clock::now();
+            int timing_points_count    = 0;
             if (ui->selected_path_type == 4) {
                 // Joint-space PTP: no IK needed, plan directly in joint space
                 auto joints = scene->getJointInfos();
@@ -1912,7 +1931,9 @@ namespace kinematic_viewer {
                     auto joint_traj = planJointSpacePTP(ptp_params);
                     if (!joint_traj.success) {
                         ui->last_status = joint_traj.status;
+                        timing_points_count = static_cast<int>(joints.size());
                     } else {
+                        timing_points_count = static_cast<int>(joint_traj.times.size());
                         // Convert to playback keyframes
                         playbackState->keyframes.clear();
                         for (size_t i = 0; i < joint_traj.times.size(); ++i) {
@@ -1941,14 +1962,22 @@ namespace kinematic_viewer {
                     std::unique_ptr<CartesianPathPlanner> planner;
                     if (ui->selected_path_type == 0) {
                         CirclePathParams params;
-                        params.center     = glm::vec3(ui->circle_center[0], ui->circle_center[1], ui->circle_center[2]);
+                        if (ui->circle_center_use_current_tip) {
+                            params.center = tip_pos;
+                        } else {
+                            params.center = glm::vec3(ui->circle_center[0], ui->circle_center[1], ui->circle_center[2]);
+                        }
                         params.radius     = ui->circle_radius;
                         params.period_sec = ui->circle_period;
                         params.num_points = ui->circle_points;
                         planner           = makeCirclePlanner(params);
                     } else if (ui->selected_path_type == 1) {
                         SquarePathParams params;
-                        params.center        = glm::vec3(ui->square_center[0], ui->square_center[1], ui->square_center[2]);
+                        if (ui->square_center_use_current_tip) {
+                            params.center = tip_pos;
+                        } else {
+                            params.center = glm::vec3(ui->square_center[0], ui->square_center[1], ui->square_center[2]);
+                        }
                         params.side_length   = ui->square_side;
                         params.corner_radius = ui->square_corner_r;
                         params.period_sec    = ui->square_period;
@@ -1963,8 +1992,15 @@ namespace kinematic_viewer {
                     } else {
                         StraightPathParams params;
                         params.start_pos  = tip_pos;
-                        params.goal_pos   = glm::vec3(ui->straight_goal[0], ui->straight_goal[1], ui->straight_goal[2]);
+                        if (ui->straight_use_relative) {
+                            params.goal_pos = tip_pos + glm::vec3(ui->straight_offset[0], ui->straight_offset[1], ui->straight_offset[2]);
+                        } else {
+                            params.goal_pos = glm::vec3(ui->straight_goal[0], ui->straight_goal[1], ui->straight_goal[2]);
+                        }
                         params.start_quat = tip_quat;
+                        const glm::vec3 rot_off_rad = glm::radians(glm::vec3(ui->straight_rot_offset_deg[0], ui->straight_rot_offset_deg[1],
+                                                                              ui->straight_rot_offset_deg[2]));
+                        params.goal_quat = glm::normalize(tip_quat * glm::quat(rot_off_rad));
                         params.max_vel    = ui->straight_max_vel;
                         params.max_acc    = ui->straight_max_acc;
                         planner           = makeStraightPlanner(params);
@@ -1974,9 +2010,13 @@ namespace kinematic_viewer {
                     if (!cart_result.success) {
                         ui->last_status = cart_result.status;
                         ui->preview_waypoints.clear();
+                        timing_points_count = 0;
                     } else {
-                        // Store Cartesian path for 3D preview
-                        ui->preview_waypoints = cart_result.waypoints;
+                        timing_points_count = static_cast<int>(cart_result.waypoints.size());
+                        // Store Cartesian path for 3D preview (fallback when IK fails or preview remap is disabled)
+                        if (ui->show_preview) {
+                            ui->preview_waypoints = cart_result.waypoints;
+                        }
 
                         // Solve IK synchronously
                         JointSpaceTrajectory joint_traj;
@@ -1989,6 +2029,69 @@ namespace kinematic_viewer {
                         if (!joint_traj.success) {
                             ui->last_status = joint_traj.status;
                         } else {
+                            timing_points_count = static_cast<int>(joint_traj.times.size());
+                            if (ui->show_preview) {
+                                // Build preview from solved joint trajectory so 3D preview matches actual motion.
+                                // Downsample to keep UI responsive on long trajectories.
+                                std::unordered_map<std::string, float> original_joint_pos;
+                                const auto scene_joints_before = scene->getJointInfos();
+                                for (const auto& j : scene_joints_before) {
+                                    original_joint_pos[j.name] = j.position;
+                                }
+
+                                constexpr size_t kMaxPreviewSamples = 180;
+                                const size_t total_samples = std::min(joint_traj.times.size(), joint_traj.joint_positions.size());
+                                const size_t sample_stride = (total_samples <= kMaxPreviewSamples)
+                                                                 ? 1
+                                                                 : ((total_samples + kMaxPreviewSamples - 1) / kMaxPreviewSamples);
+
+                                std::vector<CartesianWaypoint> solved_preview;
+                                solved_preview.reserve((total_samples + sample_stride - 1) / sample_stride);
+                                for (size_t i = 0; i < total_samples; i += sample_stride) {
+                                    const auto& q = joint_traj.joint_positions[i];
+                                    for (size_t j = 0; j < joint_traj.joint_names.size() && j < q.size(); ++j) {
+                                        scene->setJointPositionByName(joint_traj.joint_names[j], q[j]);
+                                    }
+                                    scene->updateTransforms();
+                                    glm::vec3 solved_tip_pos(0.0f);
+                                    glm::vec3 solved_tip_rpy(0.0f);
+                                    if (solver->fetchTipWorldPose(*scene, ui->selected_chain, &solved_tip_pos, &solved_tip_rpy)) {
+                                        CartesianWaypoint wp;
+                                        wp.time_sec    = joint_traj.times[i];
+                                        wp.position    = solved_tip_pos;
+                                        wp.orientation = glm::quat(glm::vec3(solved_tip_rpy.x, solved_tip_rpy.y, solved_tip_rpy.z));
+                                        solved_preview.push_back(wp);
+                                    }
+                                }
+
+                                if (total_samples > 0 && (total_samples - 1) % sample_stride != 0) {
+                                    const size_t i = total_samples - 1;
+                                    const auto& q = joint_traj.joint_positions[i];
+                                    for (size_t j = 0; j < joint_traj.joint_names.size() && j < q.size(); ++j) {
+                                        scene->setJointPositionByName(joint_traj.joint_names[j], q[j]);
+                                    }
+                                    scene->updateTransforms();
+                                    glm::vec3 solved_tip_pos(0.0f);
+                                    glm::vec3 solved_tip_rpy(0.0f);
+                                    if (solver->fetchTipWorldPose(*scene, ui->selected_chain, &solved_tip_pos, &solved_tip_rpy)) {
+                                        CartesianWaypoint wp;
+                                        wp.time_sec    = joint_traj.times[i];
+                                        wp.position    = solved_tip_pos;
+                                        wp.orientation = glm::quat(glm::vec3(solved_tip_rpy.x, solved_tip_rpy.y, solved_tip_rpy.z));
+                                        solved_preview.push_back(wp);
+                                    }
+                                }
+
+                                for (const auto& kv : original_joint_pos) {
+                                    scene->setJointPositionByName(kv.first, kv.second);
+                                }
+                                scene->updateTransforms();
+
+                                if (!solved_preview.empty()) {
+                                    ui->preview_waypoints = std::move(solved_preview);
+                                }
+                            }
+
                             // Convert to playback keyframes
                             playbackState->keyframes.clear();
                             for (size_t i = 0; i < joint_traj.times.size(); ++i) {
@@ -2006,6 +2109,18 @@ namespace kinematic_viewer {
                     }
                 }
             }
+
+            const auto plan_end_time = std::chrono::steady_clock::now();
+            const double elapsed_ms =
+                std::chrono::duration<double, std::milli>(plan_end_time - plan_begin_time).count();
+            const double avg_ms = timing_points_count > 0 ? (elapsed_ms / static_cast<double>(timing_points_count)) : 0.0;
+            const std::string plan_result_status = ui->last_status;
+            char timing_buf[160];
+            std::snprintf(timing_buf, sizeof(timing_buf), " | 用时 %.1f ms, 平均 %.2f ms/点", elapsed_ms, avg_ms);
+            ui->last_status = std::string("开始规划 -> ") + plan_result_status + timing_buf;
+            ui->planning_pending = false;
+        } else if (ui->planning_pending && ui->planning_defer_one_frame) {
+            ui->planning_defer_one_frame = false;
         }
 
         ImGui::SameLine();

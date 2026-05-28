@@ -13,11 +13,9 @@
 
 namespace kinematic_viewer {
     class KinematicIkController;
-    class KinematicRosBridge;
 
     void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene = nullptr);
-    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, KinematicRosBridge* rosBridge,
-                       teleop_viewer::RobotScene* scene);
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, teleop_viewer::RobotScene* scene);
     void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
                                   teleop_viewer::OrbitCamera* camera, const CollisionMonitorState* collisionState,
                                   const CollisionMonitorResult* collisionResult, DebugPlaybackState* playbackState,
@@ -43,12 +41,14 @@ namespace kinematic_viewer {
 
         // Circle params
         float circle_center[3] = {0.0f, 0.0f, 0.0f};
+        bool circle_center_use_current_tip = true;
         float circle_radius    = 0.1f;
         float circle_period    = 4.0f;
         int circle_points      = 60;
 
         // Square params
         float square_center[3] = {0.0f, 0.0f, 0.0f};
+        bool square_center_use_current_tip = true;
         float square_side      = 0.15f;
         float square_corner_r  = 0.02f;
         float square_period    = 4.0f;
@@ -60,7 +60,10 @@ namespace kinematic_viewer {
         int head_points          = 40;
 
         // Straight line params
+        bool straight_use_relative = true;
         float straight_goal[3] = {0.0f, 0.0f, 0.0f};
+        float straight_offset[3] = {0.0f, 0.0f, 0.0f};
+        float straight_rot_offset_deg[3] = {0.0f, 0.0f, 0.0f};  // Relative RPY offset
         float straight_max_vel = 0.2f;
         float straight_max_acc = 0.1f;
 
@@ -78,6 +81,10 @@ namespace kinematic_viewer {
 
         // Export
         char export_name[128] = "planned_trajectory.csv";
+
+        // Planning execution state (defer heavy planning by one frame for UI feedback).
+        bool planning_pending = false;
+        bool planning_defer_one_frame = false;
     };
 
     void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,

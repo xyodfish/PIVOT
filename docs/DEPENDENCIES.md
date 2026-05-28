@@ -29,21 +29,6 @@ sudo apt install -y libassimp-dev
 
 ---
 
-## ROS Noetic
-
-参考官方安装文档：http://wiki.ros.org/noetic/Installation/Ubuntu
-
-```bash
-sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
-sudo apt install -y curl
-curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
-sudo apt update
-sudo apt install -y ros-noetic-desktop-full
-sudo apt install -y ros-noetic-roscpp
-```
-
----
-
 ## pinocchio
 
 ```bash
@@ -114,7 +99,7 @@ sudo apt install -y \
     libyaml-cpp-dev libeigen3-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev ffmpeg \
     libgif-dev \
-    ros-noetic-roscpp ros-noetic-trac-ik
+    ros-noetic-trac-ik
 ```
 
 > 注：pinocchio 与 qpOASES 若通过 apt 安装版本不匹配，可能需要从源码构建。

@@ -35,7 +35,6 @@ find_package(pinocchio REQUIRED)
 find_package(tinyxml2 QUIET)
 find_package(qpOASES QUIET)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(ROSCPP REQUIRED IMPORTED_TARGET roscpp)
 
 # Match aphropm_cplanner: use yaml-cpp from ROOT_DEVEL (0.7), not system /usr (0.6).
 find_package(yaml-cpp REQUIRED)
@@ -149,7 +148,6 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_collision_monitor.cpp
     src/kinematic_viewer/kinematic_initial_pose.cpp
     src/kinematic_viewer/kinematic_marker_target_state.cpp
-    src/kinematic_viewer/kinematic_ros_bridge.cpp
     src/kinematic_viewer/kinematic_sidebar_panels.cpp
     src/kinematic_viewer/kinematic_ui_theme.cpp
     src/kinematic_viewer/kinematic_ui_feedback.cpp
@@ -161,6 +159,7 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_link_kinematics.cpp
     src/kinematic_viewer/kinematic_link_inspector.cpp
     src/kinematic_viewer/kinematic_robot_tree_panel.cpp
+    src/kinematic_viewer/kinematic_video_panel.cpp
     src/kinematic_viewer/kinematic_video_recorder.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
@@ -172,7 +171,6 @@ target_include_directories(robot_kinematic_viewer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/flex_ik"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik"
-    /opt/ros/noetic/include
     ${trac_ik_INCLUDE_DIR}
     ${GIF_INCLUDE_DIR}
 )
@@ -192,7 +190,6 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     OpenGL::GL
     glfw
     GLEW::GLEW
-    PkgConfig::ROSCPP
     yaml-cpp
     PkgConfig::LIBAV
     ${GIF_LIBRARY}

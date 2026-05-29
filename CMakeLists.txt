@@ -161,6 +161,8 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_robot_tree_panel.cpp
     src/kinematic_viewer/kinematic_video_panel.cpp
     src/kinematic_viewer/kinematic_video_recorder.cpp
+    src/kinematic_viewer/kinematic_teach.cpp
+    src/kinematic_viewer/kinematic_teach_panel.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
     deps/glad/glad.c

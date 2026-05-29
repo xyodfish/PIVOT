@@ -83,7 +83,7 @@ namespace kinematic_viewer {
             }
 
             static const std::unordered_set<std::string> kAllowedKeys = {
-                "window", "robot", "camera", "ui", "ik", "ros", "initial_pose", "playback",
+                "window", "robot", "camera", "ui", "ik", "ros", "initial_pose", "playback", "teach",
             };
 
             std::vector<std::string> unknown;
@@ -177,6 +177,10 @@ namespace kinematic_viewer {
             ReadStringListFromItem(root["playback"], "trajectory_files", cfg.playback.trajectory_files);
             ReadScalar(root["playback"], "selected_index", cfg.playback.selected_index);
             ReadScalar(root["playback"], "last_browser_dir", cfg.playback.last_browser_dir);
+
+            ReadStringListFromItem(root["teach"], "program_files", cfg.teach.program_files);
+            ReadScalar(root["teach"], "selected_index", cfg.teach.selected_index);
+            ReadScalar(root["teach"], "last_browser_dir", cfg.teach.last_browser_dir);
 
             ok = true;
         } catch (const std::exception& e) {

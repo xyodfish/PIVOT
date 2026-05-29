@@ -25,6 +25,9 @@
 #include "kinematic_viewer/kinematic_user_obstacles.h"
 #include "kinematic_viewer/kinematic_video_panel.h"
 #include "kinematic_viewer/kinematic_video_recorder.h"
+#include "kinematic_viewer/kinematic_teach.h"
+#include "kinematic_viewer/kinematic_teach_panel.h"
+#include "kinematic_viewer/kinematic_teach_state.h"
 #include "kinematic_viewer/kinematic_viewer_config.h"
 #include "teleop_viewer/ik_solver.h"
 #include "teleop_viewer/scene.h"
@@ -87,7 +90,10 @@ using kinematic_viewer::RenderPlaybackPanel;
 using kinematic_viewer::RenderRobotTreePanel;
 using kinematic_viewer::RenderSafetyPanel;
 using kinematic_viewer::RenderScenePanel;
+using kinematic_viewer::LoadTeachProgramFromYaml;
+using kinematic_viewer::RenderTeachPanel;
 using kinematic_viewer::RenderTfPanel;
+using kinematic_viewer::TeachProgramState;
 using kinematic_viewer::TrajectoryPlayer;
 using kinematic_viewer::UiSemanticLevel;
 using kinematic_viewer::UserObstacleGpuMeshes;
@@ -321,6 +327,47 @@ int main(int argc, char** argv) {
                       initial_browser_dir.c_str());
     }
     kinematic_viewer::PlaybackStateMachine playback_sm(&playback_state);
+    TeachProgramState teach_state;
+    for (const auto& path : cfg.teach.program_files) {
+        kinematic_viewer::TeachFileEntry entry;
+        entry.path   = path;
+        entry.status = "未加载";
+        entry.loaded = false;
+        teach_state.program_files.push_back(std::move(entry));
+    }
+    if (!teach_state.program_files.empty()) {
+        teach_state.selected_program_index =
+            std::clamp(cfg.teach.selected_index, 0, static_cast<int>(teach_state.program_files.size()) - 1);
+        std::snprintf(teach_state.program_file_path, sizeof(teach_state.program_file_path), "%s",
+                      teach_state.program_files[teach_state.selected_program_index].path.c_str());
+    }
+    {
+        auto isExistingDir = [](const std::string& path) -> bool {
+            std::error_code ec;
+            return std::filesystem::exists(path, ec) && std::filesystem::is_directory(path, ec);
+        };
+        std::string teach_browser_dir;
+        if (!cfg.teach.last_browser_dir.empty() && isExistingDir(cfg.teach.last_browser_dir)) {
+            teach_browser_dir = kinematic_viewer::NormalizePath(cfg.teach.last_browser_dir);
+        } else {
+            const std::string teach_dir = kinematic_viewer::NormalizePath("config/teach");
+            teach_browser_dir           = isExistingDir(teach_dir) ? teach_dir : playback_state.trajectory_browser_dir;
+        }
+        std::snprintf(teach_state.program_browser_dir, sizeof(teach_state.program_browser_dir), "%s", teach_browser_dir.c_str());
+    }
+    if (teach_state.selected_program_index >= 0) {
+        std::string teach_load_error;
+        auto& selected_entry = teach_state.program_files[static_cast<size_t>(teach_state.selected_program_index)];
+        if (LoadTeachProgramFromYaml(teach_state.program_file_path, &teach_state, &teach_load_error)) {
+            selected_entry.status = "加载成功";
+            selected_entry.loaded = true;
+            teach_state.io_status = "启动已加载: " + teach_state.program_name;
+        } else {
+            selected_entry.status = "加载失败: " + teach_load_error;
+            selected_entry.loaded = false;
+            teach_state.io_status = selected_entry.status;
+        }
+    }
     CollisionMonitorState collision_state;
     TrajectoryPlayer trajectory_player;
     CollisionMonitor collision_monitor;
@@ -878,7 +925,8 @@ int main(int argc, char** argv) {
             int index;
         };
         const SidebarTab sidebar_tabs[] = {
-            {"场景", 0}, {"IK", 1}, {"回放", 2}, {"安全", 3}, {"关节", 4}, {"TF", 5}, {"障碍", 6}, {"规划", 7},
+            {"场景", 0},  {"IK", 1},    {"回放", 2}, {"安全", 3}, {"关节", 4},
+            {"TF", 5},    {"障碍", 6},  {"规划", 7}, {"示教", 8},
         };
         float avail_w = ImGui::GetContentRegionAvail().x;
         float used_w  = 0.0f;
@@ -952,6 +1000,9 @@ int main(int argc, char** argv) {
         if (ui_state.sidebar_page == 7) {
             RenderPathPlannerPanel(&ui_state, &path_planner_ui, &playback_state, &scene, &ik_state.solver, ik_state.chains);
         }
+        if (ui_state.sidebar_page == 8) {
+            RenderTeachPanel(&teach_state, &playback_state, &scene, &ik_state.solver, ik_state.chains, joints);
+        }
 
         kinematic_viewer::EndSidebarScrollRegion();
 
@@ -995,6 +1046,12 @@ int main(int argc, char** argv) {
     }
     cfg.playback.selected_index   = playback_state.selected_trajectory_index;
     cfg.playback.last_browser_dir = playback_state.trajectory_browser_dir;
+    cfg.teach.program_files.clear();
+    for (const auto& entry : teach_state.program_files) {
+        cfg.teach.program_files.push_back(entry.path);
+    }
+    cfg.teach.selected_index   = teach_state.selected_program_index;
+    cfg.teach.last_browser_dir = teach_state.program_browser_dir;
 
     DestroyUserObstacleGpuMeshes(&obstacle_meshes);
     glDeleteProgram(mesh_shader);

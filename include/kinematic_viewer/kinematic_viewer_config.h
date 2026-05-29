@@ -44,6 +44,12 @@ namespace kinematic_viewer {
         std::string last_browser_dir;  // remembered trajectory file browser directory
     };
 
+    struct KinematicTeachConfig {
+        std::vector<std::string> program_files;
+        int selected_index      = -1;
+        std::string last_browser_dir;
+    };
+
     struct KinematicViewerConfig {
         WindowConfig window;
         RobotConfig robot;
@@ -53,6 +59,7 @@ namespace kinematic_viewer {
         KinematicRosConfig ros;
         KinematicInitialPoseConfig initial_pose;
         KinematicPlaybackConfig playback;
+        KinematicTeachConfig teach;
 
         static KinematicViewerConfig LoadFromFile(const std::string& yaml_path, bool* loaded_ok = nullptr);
     };

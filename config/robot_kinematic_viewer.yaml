@@ -78,3 +78,9 @@ playback:
   trajectory_files: []
   selected_index: -1
   last_browser_dir: "config/trajectories"
+
+teach:
+  program_files:
+    - "config/teach/demo.yaml"
+  selected_index: 0
+  last_browser_dir: "config/teach"

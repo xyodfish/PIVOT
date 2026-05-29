@@ -30,7 +30,7 @@ namespace kinematic_viewer {
         bool show_revolute_only             = true;
         bool lock_base                      = true;
         bool show_non_revolute              = false;
-        bool enable_link_hover_highlight    = true;
+        bool enable_link_hover_highlight    = false;
         bool enable_link_click_select       = false;
         float axis_length                   = 0.12f;
         float axis_line_width               = 2.0f;
@@ -111,6 +111,7 @@ namespace kinematic_viewer {
         bool gizmo_was_over                  = false;
         bool gizmo_world_mode                = true;
         bool realtime_ik_during_drag         = true;
+        bool realtime_ik_rotate_during_drag  = false;
         float realtime_ik_hz                 = 30.0f;
         double last_realtime_ik_apply_sec    = -1.0;
         float gizmo_size_clip_space          = 0.11f;

@@ -864,7 +864,11 @@ namespace kinematic_viewer {
             }
             kinematic_viewer::SidebarSliderFloat("Gizmo尺寸", &ikState->gizmo_size_clip_space, 0.10f, 0.40f, "%.2f");
             if (ikState->realtime_ik_during_drag) {
+                ImGui::Checkbox("旋转拖动实时IK", &ikState->realtime_ik_rotate_during_drag);
                 kinematic_viewer::SidebarSliderFloat("IK Hz", &ikState->realtime_ik_hz, 5.0f, 120.0f, "%.0f");
+                if (!ikState->realtime_ik_rotate_during_drag) {
+                    ImGui::TextDisabled("旋转拖动默认仅松手求解（更稳）");
+                }
                 if (ikState->solve_mode == "full_body") {
                     ImGui::TextDisabled("full_body 拖动时频率自动上限：平移12Hz，姿态4Hz");
                     ImGui::TextDisabled("full_body 平移拖动走位置优先，旋转拖动走姿态求解");
@@ -1894,10 +1898,19 @@ namespace kinematic_viewer {
         ImGui::Separator();
 
         // Action buttons
+        const bool planning_pending_before_button = ui->planning_pending;
+        if (planning_pending_before_button) {
+            ImGui::BeginDisabled();
+        }
         if (ImGui::Button("生成路径并求解 IK") && !ui->planning_pending) {
             ui->last_status = "开始规划...";
             ui->planning_pending = true;
             ui->planning_defer_one_frame = true;
+        }
+        if (planning_pending_before_button) {
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.95f, 0.85f, 0.35f, 1.0f), "规划中...");
         }
 
         if (ui->planning_pending && !ui->planning_defer_one_frame) {
@@ -2139,6 +2152,9 @@ namespace kinematic_viewer {
         }
 
         ImGui::Checkbox("3D 预览", &ui->show_preview);
+        if (ui->planning_pending) {
+            ImGui::TextColored(ImVec4(0.95f, 0.85f, 0.35f, 1.0f), "状态: 开始规划...");
+        }
 
         if (!ui->last_status.empty()) {
             ImVec4 color = ImVec4(0.6f, 0.95f, 0.6f, 1.0f);

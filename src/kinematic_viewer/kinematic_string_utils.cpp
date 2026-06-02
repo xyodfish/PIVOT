@@ -107,8 +107,7 @@ namespace kinematic_viewer {
         return std::string(buf);
     }
 
-    bool ParsePoseInputXyYaw(const char* text, float* out_x, float* out_y, float* out_yaw, bool yaw_is_deg,
-                             std::string* out_error) {
+    bool ParsePoseInputXyYaw(const char* text, float* out_x, float* out_y, float* out_yaw, bool yaw_is_deg, std::string* out_error) {
         if (text == nullptr || out_x == nullptr || out_y == nullptr || out_yaw == nullptr) {
             if (out_error != nullptr) {
                 *out_error = "输入为空";

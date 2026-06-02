@@ -12,7 +12,7 @@
 namespace kinematic_viewer {
 
     void CaptureTeachPointFromScene(TeachProgramState* teach, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                     const teleop_viewer::RobotScene& scene, const std::string& ee_tip_link);
+                                    const teleop_viewer::RobotScene& scene, const std::string& ee_tip_link);
 
     void ApplyTeachPointToScene(const TeachPoint& point, teleop_viewer::RobotScene* scene);
 
@@ -30,9 +30,8 @@ namespace kinematic_viewer {
     CartesianPathResult BuildTeachMoveLTrajectory(const TeachProgramState& teach, std::string* status_message);
 
     /// 将轨迹或示教点写入回放关键帧（供侧栏回放页播放）。
-    bool LoadJointTrajectoryIntoPlayback(const JointSpaceTrajectory& traj, DebugPlaybackState* playback_state,
-                                         std::string* error_message);
-    bool LoadTeachPointsIntoPlayback(const TeachProgramState& teach, float seconds_per_segment,
-                                     DebugPlaybackState* playback_state, std::string* error_message);
+    bool LoadJointTrajectoryIntoPlayback(const JointSpaceTrajectory& traj, DebugPlaybackState* playback_state, std::string* error_message);
+    bool LoadTeachPointsIntoPlayback(const TeachProgramState& teach, float seconds_per_segment, DebugPlaybackState* playback_state,
+                                     std::string* error_message);
 
 }  // namespace kinematic_viewer

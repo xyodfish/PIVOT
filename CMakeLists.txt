@@ -31,12 +31,12 @@ find_package(trac_ik REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ASSIMP REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(glog REQUIRED) 
 find_package(pinocchio REQUIRED)
 find_package(tinyxml2 QUIET)
 find_package(qpOASES QUIET)
 find_package(PkgConfig REQUIRED)
 
-# Match aphropm_cplanner: use yaml-cpp from ROOT_DEVEL (0.7), not system /usr (0.6).
 find_package(yaml-cpp REQUIRED)
 
 # FFmpeg / libav
@@ -85,7 +85,7 @@ if(NOT qpOASES_FOUND)
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib")
 set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
@@ -106,6 +106,7 @@ target_include_directories(imguizmo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/img
 add_library(flex_ik_core src/ik_backends/flex_ik/flex_ik.cc)
 target_include_directories(flex_ik_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/flex_ik")
 target_link_libraries(flex_ik_core PUBLIC Eigen3::Eigen pinocchio::pinocchio)
+set_target_properties(flex_ik_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(wbc_chain_ik_core
     src/ik_backends/wbc_chain_ik/robot/traits/chain_ik.cpp
@@ -115,6 +116,7 @@ add_library(wbc_chain_ik_core
 )
 target_include_directories(wbc_chain_ik_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik")
 target_link_libraries(wbc_chain_ik_core PUBLIC Eigen3::Eigen pinocchio::pinocchio)
+set_target_properties(wbc_chain_ik_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Velocity Planning Library (from trajectory_planner_utils)
 add_library(velocity_planning
@@ -132,10 +134,32 @@ target_include_directories(velocity_planning PUBLIC
 if(EIGEN3_FOUND)
     target_link_libraries(velocity_planning PUBLIC Eigen3::Eigen)
 endif()
+set_target_properties(velocity_planning PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_executable(robot_kinematic_viewer
-    src/robot_kinematic_viewer.cpp
-    src/kinematic_viewer/kinematic_app.cpp
+# PCL is loaded via a separate shared library (dlopen) to avoid heap conflicts with
+# pinocchio/trac_ik when all DSOs initialize in the main executable.
+set(RKV_PCL_LIB_NAMES
+    pcl_common pcl_octree pcl_search pcl_kdtree pcl_sample_consensus
+    pcl_filters pcl_io pcl_io_ply lz4 flann_cpp boost_filesystem)
+set(RKV_PCL_LIBS "")
+set(RKV_PCL_FOUND TRUE)
+foreach(_rkv_pcl_lib IN LISTS RKV_PCL_LIB_NAMES)
+    find_library(RKV_PCL_LIB_${_rkv_pcl_lib} NAMES ${_rkv_pcl_lib}
+        PATHS "${ROOT_DEVEL_ARCH_PATH}/lib" "${CONTROL_DEVEL_ARCH_PATH}/lib"
+        NO_DEFAULT_PATH)
+    if(NOT RKV_PCL_LIB_${_rkv_pcl_lib})
+        set(RKV_PCL_FOUND FALSE)
+        message(STATUS "PCL: missing lib ${_rkv_pcl_lib}")
+        break()
+    endif()
+    list(APPEND RKV_PCL_LIBS ${RKV_PCL_LIB_${_rkv_pcl_lib}})
+endforeach()
+
+# ---------------------------------------------------------------------------
+# rkv_viewer_core — all reusable viewer logic as a shared lib.
+# Panel plugins and the main executable both link against it.
+# ---------------------------------------------------------------------------
+add_library(rkv_viewer_core SHARED
     src/kinematic_viewer/kinematic_ik_controller.cpp
     src/kinematic_viewer/kinematic_string_utils.cpp
     src/kinematic_viewer/kinematic_viewer_config.cpp
@@ -143,7 +167,6 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_input_handler.cpp
     src/kinematic_viewer/kinematic_config_watcher.cpp
     src/kinematic_viewer/kinematic_playback_state_machine.cpp
-    src/kinematic_viewer/kinematic_bootstrap.cpp
     src/kinematic_viewer/kinematic_playback.cpp
     src/kinematic_viewer/kinematic_collision_monitor.cpp
     src/kinematic_viewer/kinematic_initial_pose.cpp
@@ -163,21 +186,21 @@ add_executable(robot_kinematic_viewer
     src/kinematic_viewer/kinematic_video_recorder.cpp
     src/kinematic_viewer/kinematic_teach.cpp
     src/kinematic_viewer/kinematic_teach_panel.cpp
+    src/kinematic_viewer/kinematic_point_cloud.cpp
+    src/kinematic_viewer/rkv_panel_registry.cpp
     src/teleop_viewer/ik_solver.cpp
     src/teleop_viewer/scene.cpp
-    deps/glad/glad.c
 )
-
-target_include_directories(robot_kinematic_viewer PRIVATE
+target_include_directories(rkv_viewer_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/flex_ik"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/wbc_chain_ik"
     ${trac_ik_INCLUDE_DIR}
     ${GIF_INCLUDE_DIR}
+    ${GLOG_INCLUDE_DIR}
 )
-
-target_link_libraries(robot_kinematic_viewer PRIVATE
+target_link_libraries(rkv_viewer_core PUBLIC
     imgui_glfw_support
     imguizmo
     assimp
@@ -196,15 +219,87 @@ target_link_libraries(robot_kinematic_viewer PRIVATE
     PkgConfig::LIBAV
     ${GIF_LIBRARY}
     pthread
+    dl
+    glog::glog
     ${CMAKE_DL_LIBS}
 )
+set_target_properties(rkv_viewer_core PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib"
+    BUILD_RPATH "${ROOT_DEVEL_ARCH_PATH}/lib"
+    INSTALL_RPATH "$ORIGIN")
 
 if(qpOASES_FOUND)
-    target_link_libraries(robot_kinematic_viewer PRIVATE ${qpOASES_LIBRARIES})
+    target_link_libraries(rkv_viewer_core PUBLIC ${qpOASES_LIBRARIES})
 elseif(QPOASES_LIBRARY)
-    target_link_libraries(robot_kinematic_viewer PRIVATE ${QPOASES_LIBRARY})
+    target_link_libraries(rkv_viewer_core PUBLIC ${QPOASES_LIBRARY})
+endif()
+
+# ---------------------------------------------------------------------------
+# Helper macro: one panel .so = rkv_panel_<id>
+# ---------------------------------------------------------------------------
+macro(rkv_add_panel id src)
+    add_library(rkv_panel_${id} SHARED ${src})
+    target_link_libraries(rkv_panel_${id} PRIVATE rkv_viewer_core)
+    set_target_properties(rkv_panel_${id} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib"
+        BUILD_RPATH "${ROOT_DEVEL_ARCH_PATH}/lib"
+        INSTALL_RPATH "$ORIGIN")
+endmacro()
+
+rkv_add_panel(scene       src/panels/panel_scene.cpp)
+rkv_add_panel(ik          src/panels/panel_ik.cpp)
+rkv_add_panel(playback    src/panels/panel_playback.cpp)
+rkv_add_panel(safety      src/panels/panel_safety.cpp)
+rkv_add_panel(joint       src/panels/panel_joint.cpp)
+rkv_add_panel(tf          src/panels/panel_tf.cpp)
+rkv_add_panel(obstacle    src/panels/panel_obstacle.cpp)
+rkv_add_panel(planner     src/panels/panel_planner.cpp)
+rkv_add_panel(teach       src/panels/panel_teach.cpp)
+rkv_add_panel(point_cloud src/panels/panel_point_cloud.cpp)
+
+# ---------------------------------------------------------------------------
+# Main executable — only app glue + glad; everything else is in rkv_viewer_core
+# ---------------------------------------------------------------------------
+add_executable(robot_kinematic_viewer
+    src/robot_kinematic_viewer.cpp
+    src/kinematic_viewer/kinematic_app.cpp
+    src/kinematic_viewer/kinematic_bootstrap.cpp
+    deps/glad/glad.c
+)
+
+target_link_libraries(robot_kinematic_viewer PRIVATE rkv_viewer_core)
+set_target_properties(robot_kinematic_viewer PROPERTIES
+    BUILD_RPATH "${PROJECT_SOURCE_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib"
+    INSTALL_RPATH "$ORIGIN/../lib")
+
+if(RKV_PCL_FOUND)
+    find_library(RKV_LIB_GOMP NAMES gomp libgomp PATHS "${ROOT_DEVEL_ARCH_PATH}/lib" NO_DEFAULT_PATH)
+    if(RKV_LIB_GOMP)
+        list(APPEND RKV_PCL_LIBS ${RKV_LIB_GOMP})
+    endif()
+
+    add_library(rkv_point_cloud_pcl SHARED
+        src/kinematic_viewer/kinematic_point_cloud_pcl.cpp
+        src/kinematic_viewer/rkv_esdf_grid.cpp
+        src/kinematic_viewer/rkv_fiesta_esdf.cpp
+        src/kinematic_viewer/rkv_raycast.cpp
+    )
+    target_compile_definitions(rkv_point_cloud_pcl PRIVATE RKV_PCL_LOADER_EXPORTS=1)
+    target_include_directories(rkv_point_cloud_pcl PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${ROOT_DEVEL_ARCH_PATH}/include"
+        "${ROOT_DEVEL_ARCH_PATH}/include/eigen3")
+    target_link_libraries(rkv_point_cloud_pcl PRIVATE ${RKV_PCL_LIBS})
+    set_target_properties(rkv_point_cloud_pcl PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/lib"
+        BUILD_RPATH "${ROOT_DEVEL_ARCH_PATH}/lib"
+        INSTALL_RPATH "$ORIGIN/../lib")
+
+    target_compile_definitions(robot_kinematic_viewer PRIVATE RKV_HAS_PCL=1)
+    add_dependencies(robot_kinematic_viewer rkv_point_cloud_pcl)
+    message(STATUS "Point cloud: PCL plugin rkv_point_cloud_pcl (${RKV_PCL_LIBS})")
 else()
-    message(WARNING "qpOASES not explicitly linked; full-body IK backends may fail to link.")
+    message(WARNING "PCL libraries not found under ${ROOT_DEVEL_ARCH_PATH}/lib — point cloud loading disabled")
 endif()
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

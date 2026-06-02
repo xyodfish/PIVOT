@@ -61,7 +61,8 @@ namespace kinematic_viewer {
         int mobile_base_pose_input_format = 0;  // 0: x,y,yaw  1: x,y,z,qx,qy,qz,qw
         char mobile_base_pose_input[256]  = {0};
         std::string mobile_base_pose_input_status;
-        int sidebar_page = 4;  // 0:场景 1:IK 2:回放 3:安全 4:关节 5:TF 6:障碍 7:规划 8:示教
+        int sidebar_page                  = 4;
+        bool scene_panel_active           = false;
         UserObstacleState user_obstacles;
 
         // Video recording state

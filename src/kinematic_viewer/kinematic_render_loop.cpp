@@ -19,6 +19,7 @@ namespace kinematic_viewer {
         const glm::mat4 view = ctx.camera->viewMatrix();
         const glm::vec3 eye  = ctx.camera->eye();
 
+        DrawPointCloud(ctx, view, proj);
         DrawSceneMeshes(ctx.mesh_shader, ctx, proj, view);
         DrawObstacles(ctx.mesh_shader, ctx, view, proj);
 
@@ -72,6 +73,21 @@ namespace kinematic_viewer {
 
     void KinematicRenderLoop::DrawObstacles(GLuint shader, const Context& ctx, const glm::mat4& view, const glm::mat4& proj) {
         DrawUserObstacles(shader, ctx.ui_state->user_obstacles, *ctx.obstacle_meshes, view, proj);
+    }
+
+    void KinematicRenderLoop::DrawPointCloud(const Context& ctx, const glm::mat4& view, const glm::mat4& proj) {
+        if (ctx.point_shader == 0 || ctx.point_cloud == nullptr || ctx.point_cloud_layer == nullptr) {
+            return;
+        }
+        if (!ctx.point_cloud->visible || !ctx.point_cloud_layer->hasGpuData()) {
+            return;
+        }
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, glm::vec3(ctx.point_cloud->offset_x, ctx.point_cloud->offset_y, 0.0f));
+        model = glm::rotate(model, glm::radians(ctx.point_cloud->offset_yaw), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        ctx.point_cloud_layer->Draw(ctx.point_shader, view, proj, model, ctx.point_cloud->point_size_px);
     }
 
     void KinematicRenderLoop::BuildAxisVertices(const Context& ctx, std::vector<KinematicLineVertex>* out) {
@@ -185,7 +201,7 @@ namespace kinematic_viewer {
     }
 
     void KinematicRenderLoop::BuildMarkerAxes(const Context& ctx, std::vector<KinematicLineVertex>* out) {
-        if (ctx.ui_state != nullptr && ctx.ui_state->mobile_base_drag_enabled && ctx.ui_state->sidebar_page == 0) {
+        if (ctx.ui_state != nullptr && ctx.ui_state->mobile_base_drag_enabled && ctx.ui_state->scene_panel_active) {
             return;
         }
         for (int i = 0; i < static_cast<int>(ctx.ik_state->marker_targets.size()); ++i) {

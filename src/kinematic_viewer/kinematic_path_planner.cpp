@@ -57,9 +57,9 @@ namespace kinematic_viewer {
             bc.max_jerk          = std::max(1e-4, bc.max_acc * 8.0 / period_sec);
             bc.delta_t           = period_sec / static_cast<double>(num_points);
 
-            std::vector<vp::BCs<double>> bc_vec = {bc};
+            std::vector<vp::BCs<double>> bc_vec                           = {bc};
             std::shared_ptr<vp::VelocityPlannerInterface<double>> planner = std::make_shared<vp::DoubleSPlanner>(bc_vec, "DSVP");
-            auto kstates = planner->planKStates(false);
+            auto kstates                                                  = planner->planKStates(false);
             if (!kstates.empty() && !kstates[0].empty()) {
                 samples = std::move(kstates[0]);
             }
@@ -335,8 +335,8 @@ namespace kinematic_viewer {
                 for (size_t i = 0; i < n; ++i) {
                     const auto& point = traj[i];
                     CartesianWaypoint wp;
-                    wp.time_sec    = static_cast<float>(point[0]);
-                    wp.position    = glm::vec3(static_cast<float>(point[1]), static_cast<float>(point[2]), static_cast<float>(point[3]));
+                    wp.time_sec       = static_cast<float>(point[0]);
+                    wp.position       = glm::vec3(static_cast<float>(point[1]), static_cast<float>(point[2]), static_cast<float>(point[3]));
                     const float ratio = (n > 1) ? static_cast<float>(i) / static_cast<float>(n - 1) : 1.0f;
                     wp.orientation    = glm::normalize(glm::slerp(params_.start_quat, params_.goal_quat, ratio));
                     result.waypoints.push_back(wp);
@@ -457,8 +457,7 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // IK Solver for Cartesian Path (Full Body Mode)
     // ------------------------------------------------------------------
-    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path,
-                                                         teleop_viewer::RobotScene* scene,
+    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
                                                          teleop_viewer::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;

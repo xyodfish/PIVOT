@@ -107,8 +107,8 @@ namespace kinematic_viewer {
 
                 if (s_browser_force_refresh || s_cached_entries.empty()) {
                     s_browser_force_refresh = false;
-                    s_cached_entries        = ScanDirectoryForBrowser(normalized_dir, [](const std::filesystem::path&) { return true; },
-                                                               FileBrowserSortBy::NameAsc);
+                    s_cached_entries        = ScanDirectoryForBrowser(
+                        normalized_dir, [](const std::filesystem::path&) { return true; }, FileBrowserSortBy::NameAsc);
                 }
 
                 if (ImGui::BeginChild("record_dir_browser_list", ImVec2(0, -48), true)) {
@@ -125,8 +125,7 @@ namespace kinematic_viewer {
 
                             std::string display_name = entry.is_directory ? ("[DIR] " + entry.name) : entry.name;
                             ImGui::PushStyleColor(ImGuiCol_Text,
-                                                  entry.is_directory ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f)
-                                                                     : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                                                  entry.is_directory ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
                             if (ImGui::Selectable(display_name.c_str(), false,
                                                   ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
                                 if (entry.is_directory) {

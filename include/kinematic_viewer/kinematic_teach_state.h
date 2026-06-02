@@ -36,8 +36,8 @@ namespace kinematic_viewer {
         int selected_point_index = -1;
 
         std::vector<TeachFileEntry> program_files;
-        int selected_program_index = -1;
-        char program_file_path[512] = "config/teach/demo.yaml";
+        int selected_program_index    = -1;
+        char program_file_path[512]   = "config/teach/demo.yaml";
         char program_browser_dir[512] = "";
         std::string io_status;
 
@@ -45,14 +45,14 @@ namespace kinematic_viewer {
         int record_chain_index = 0;
 
         // moveJ / moveL 规划参数（对接 vp）
-        float movej_max_vel   = 1.0f;
-        float movej_max_acc   = 2.0f;
-        float movej_max_jerk  = 10.0f;
-        float movej_delta_t   = 0.02f;
-        int movej_profile     = 1;  // 0=TVP, 1=DSVP
-        float movel_max_vel   = 0.2f;
-        float movel_max_acc   = 0.1f;
-        float movel_delta_t   = 0.02f;
+        float movej_max_vel  = 1.0f;
+        float movej_max_acc  = 2.0f;
+        float movej_max_jerk = 10.0f;
+        float movej_delta_t  = 0.02f;
+        int movej_profile    = 1;  // 0=TVP, 1=DSVP
+        float movel_max_vel  = 0.2f;
+        float movel_max_acc  = 0.1f;
+        float movel_delta_t  = 0.02f;
     };
 
 }  // namespace kinematic_viewer

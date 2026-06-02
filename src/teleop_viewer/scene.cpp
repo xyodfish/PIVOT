@@ -75,9 +75,7 @@ namespace teleop_viewer {
                 glBindVertexArray(0);
             }
 
-            bool hasValidTexture() const {
-                return !textures.empty() && textures[0].id != 0;
-            }
+            bool hasValidTexture() const { return !textures.empty() && textures[0].id != 0; }
 
             void draw(GLuint shader, const glm::vec3* override_color = nullptr, bool force_color_only = false) {
                 glBindVertexArray(vao);
@@ -248,7 +246,7 @@ namespace teleop_viewer {
             CollisionGeomKind kind    = CollisionGeomKind::Sphere;
             glm::vec3 params          = glm::vec3(0.1f);
             Model model;
-            bool loaded               = false;
+            bool loaded = false;
         };
 
         void appendMeshTriangle(Mesh* mesh, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
@@ -256,7 +254,7 @@ namespace teleop_viewer {
                 return;
             }
             const unsigned int base = static_cast<unsigned int>(mesh->vertices.size());
-            auto push_vertex          = [&](const glm::vec3& p, const glm::vec3& n) {
+            auto push_vertex        = [&](const glm::vec3& p, const glm::vec3& n) {
                 Vertex v;
                 v.position   = p;
                 v.normal     = n;
@@ -402,48 +400,48 @@ namespace teleop_viewer {
 
     }  // namespace
 
-        struct LinkInertialLocal {
-            std::string link_name;
-            glm::mat4 local_transform = glm::mat4(1.0f);
-        };
+    struct LinkInertialLocal {
+        std::string link_name;
+        glm::mat4 local_transform = glm::mat4(1.0f);
+    };
 
-        struct PickMeshTriangle {
-            std::string link_name;
-            glm::vec3 v0 = glm::vec3(0.0f);
-            glm::vec3 v1 = glm::vec3(0.0f);
-            glm::vec3 v2 = glm::vec3(0.0f);
-        };
+    struct PickMeshTriangle {
+        std::string link_name;
+        glm::vec3 v0 = glm::vec3(0.0f);
+        glm::vec3 v1 = glm::vec3(0.0f);
+        glm::vec3 v2 = glm::vec3(0.0f);
+    };
 
-        bool intersectRayTriangle(const glm::vec3& ray_o, const glm::vec3& ray_d, const glm::vec3& v0, const glm::vec3& v1,
-                                  const glm::vec3& v2, float* out_t) {
-            const float eps  = 1e-6f;
-            const glm::vec3 e1  = v1 - v0;
-            const glm::vec3 e2  = v2 - v0;
-            const glm::vec3 pvec = glm::cross(ray_d, e2);
-            const float det       = glm::dot(e1, pvec);
-            if (std::fabs(det) < eps) {
-                return false;
-            }
-            const float inv_det = 1.0f / det;
-            const glm::vec3 tvec = ray_o - v0;
-            const float u        = glm::dot(tvec, pvec) * inv_det;
-            if (u < 0.0f || u > 1.0f) {
-                return false;
-            }
-            const glm::vec3 qvec = glm::cross(tvec, e1);
-            const float v        = glm::dot(ray_d, qvec) * inv_det;
-            if (v < 0.0f || u + v > 1.0f) {
-                return false;
-            }
-            const float t = glm::dot(e2, qvec) * inv_det;
-            if (t <= eps) {
-                return false;
-            }
-            if (out_t != nullptr) {
-                *out_t = t;
-            }
-            return true;
+    bool intersectRayTriangle(const glm::vec3& ray_o, const glm::vec3& ray_d, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2,
+                              float* out_t) {
+        const float eps      = 1e-6f;
+        const glm::vec3 e1   = v1 - v0;
+        const glm::vec3 e2   = v2 - v0;
+        const glm::vec3 pvec = glm::cross(ray_d, e2);
+        const float det      = glm::dot(e1, pvec);
+        if (std::fabs(det) < eps) {
+            return false;
         }
+        const float inv_det  = 1.0f / det;
+        const glm::vec3 tvec = ray_o - v0;
+        const float u        = glm::dot(tvec, pvec) * inv_det;
+        if (u < 0.0f || u > 1.0f) {
+            return false;
+        }
+        const glm::vec3 qvec = glm::cross(tvec, e1);
+        const float v        = glm::dot(ray_d, qvec) * inv_det;
+        if (v < 0.0f || u + v > 1.0f) {
+            return false;
+        }
+        const float t = glm::dot(e2, qvec) * inv_det;
+        if (t <= eps) {
+            return false;
+        }
+        if (out_t != nullptr) {
+            *out_t = t;
+        }
+        return true;
+    }
 
     struct RobotScene::Impl {
         std::map<std::string, LinkVisual> visuals;
@@ -532,8 +530,7 @@ namespace teleop_viewer {
                 if (it == transforms.end()) {
                     continue;
                 }
-                const glm::mat4 model_mat =
-                    it->second * lv.local_transform * glm::scale(glm::mat4(1.0f), lv.scale);
+                const glm::mat4 model_mat = it->second * lv.local_transform * glm::scale(glm::mat4(1.0f), lv.scale);
                 for (const auto& mesh : lv.model.meshes) {
                     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
                         const auto world_vertex = [&](unsigned int idx) -> glm::vec3 {
@@ -626,20 +623,20 @@ namespace teleop_viewer {
             out_visual->model.meshes.clear();
 
             if (collision->geometry->type == urdf::Geometry::SPHERE) {
-                auto sphere         = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
-                out_visual->kind    = CollisionGeomKind::Sphere;
-                const float radius  = static_cast<float>(sphere->radius);
-                out_visual->params  = glm::vec3(radius, radius, radius);
+                auto sphere        = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
+                out_visual->kind   = CollisionGeomKind::Sphere;
+                const float radius = static_cast<float>(sphere->radius);
+                out_visual->params = glm::vec3(radius, radius, radius);
                 buildUnitSphereMesh(&out_visual->model);
                 out_visual->loaded = !out_visual->model.meshes.empty();
                 return true;
             }
 
             if (collision->geometry->type == urdf::Geometry::BOX) {
-                auto box           = std::static_pointer_cast<urdf::Box>(collision->geometry);
-                out_visual->kind   = CollisionGeomKind::Box;
-                out_visual->params = glm::vec3(static_cast<float>(box->dim.x), static_cast<float>(box->dim.y),
-                                                static_cast<float>(box->dim.z));
+                auto box         = std::static_pointer_cast<urdf::Box>(collision->geometry);
+                out_visual->kind = CollisionGeomKind::Box;
+                out_visual->params =
+                    glm::vec3(static_cast<float>(box->dim.x), static_cast<float>(box->dim.y), static_cast<float>(box->dim.z));
                 buildUnitBoxMesh(&out_visual->model);
                 out_visual->loaded = !out_visual->model.meshes.empty();
                 return true;
@@ -788,11 +785,11 @@ namespace teleop_viewer {
                         if (glm::length(axis) < 1e-6f) {
                             axis = glm::vec3(0.0f, 0.0f, 1.0f);
                         }
-                        detail.axis_local = glm::normalize(axis);
+                        detail.axis_local          = glm::normalize(axis);
                         joint_details[detail.name] = detail;
 
                         JointAxisState axis_state;
-                        axis_state.name = joint->name;
+                        axis_state.name                   = joint->name;
                         axis_state.axis_local             = detail.axis_local;
                         axis_state.revolute               = js.revolute;
                         joint_axis_index[axis_state.name] = joint_axis_states.size();
@@ -848,8 +845,8 @@ namespace teleop_viewer {
 
                 if (link->inertial) {
                     LinkInertialLocal inertial;
-                    inertial.link_name        = link->name;
-                    inertial.local_transform  = poseToTransform(link->inertial->origin);
+                    inertial.link_name                = link->name;
+                    inertial.local_transform          = poseToTransform(link->inertial->origin);
                     impl_->link_inertials[link->name] = inertial;
                 }
 
@@ -905,8 +902,7 @@ namespace teleop_viewer {
                     }
                     LocalCollisionProxy local_proxy;
                     CollisionVisual collision_visual;
-                    if (!impl_->buildCollisionVisualFromGeometry(collision, link->name, collision_name, &local_proxy,
-                                                                 &collision_visual)) {
+                    if (!impl_->buildCollisionVisualFromGeometry(collision, link->name, collision_name, &local_proxy, &collision_visual)) {
                         continue;
                     }
                     impl_->collision_proxies_local.push_back(std::move(local_proxy));
@@ -1090,8 +1086,7 @@ namespace teleop_viewer {
         }
 
         const glm::vec3 collision_color(0.58f, 0.28f, 0.92f);
-        const bool highlight_collision =
-            !style.hovered_link.empty() || !style.selected_link.empty();
+        const bool highlight_collision = !style.hovered_link.empty() || !style.selected_link.empty();
 
         for (auto& cv : impl_->collision_visuals) {
             if (!cv.loaded) {
@@ -1122,10 +1117,7 @@ namespace teleop_viewer {
             }
 
             const float alpha =
-                (highlight_collision &&
-                 (cv.link_name == style.hovered_link || cv.link_name == style.selected_link))
-                    ? 0.72f
-                    : 0.48f;
+                (highlight_collision && (cv.link_name == style.hovered_link || cv.link_name == style.selected_link)) ? 0.72f : 0.48f;
             if (loc_alpha >= 0) {
                 glUniform1f(loc_alpha, alpha);
             }
@@ -1163,7 +1155,7 @@ namespace teleop_viewer {
                 if (std::fabs(js.position - new_position) < 1e-7f) {
                     return true;
                 }
-                js.position           = new_position;
+                js.position             = new_position;
                 impl_->joint_pose_dirty = true;
                 return true;
             }
@@ -1172,7 +1164,7 @@ namespace teleop_viewer {
     }
 
     bool RobotScene::consumeJointPoseDirty() {
-        const bool dirty           = impl_->joint_pose_dirty;
+        const bool dirty        = impl_->joint_pose_dirty;
         impl_->joint_pose_dirty = false;
         return dirty;
     }
@@ -1366,8 +1358,8 @@ namespace teleop_viewer {
             }
             const glm::vec4 world = it->second * inertial.local_transform * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             LinkComInfo info;
-            info.link_name        = link_name;
-            info.world_position   = glm::vec3(world);
+            info.link_name      = link_name;
+            info.world_position = glm::vec3(world);
             out.push_back(info);
         }
         return out;
@@ -1435,7 +1427,7 @@ namespace teleop_viewer {
 
         std::unordered_map<std::string, float> best_t_by_link;
         for (const auto& proxy : getLinkCollisionProxies()) {
-            float hit_t = 0.0f;
+            float hit_t             = 0.0f;
             const float pick_radius = std::max(proxy.radius_m * 1.05f, 0.02f);
             if (!intersectRaySphere(ray_origin, dir, proxy.world_center, pick_radius, &hit_t)) {
                 continue;
@@ -1450,8 +1442,8 @@ namespace teleop_viewer {
         float best_t = 1e9f;
         for (const auto& kv : best_t_by_link) {
             if (kv.second < best_t) {
-                best_t     = kv.second;
-                best_link  = kv.first;
+                best_t    = kv.second;
+                best_link = kv.first;
             }
         }
         if (best_link.empty()) {

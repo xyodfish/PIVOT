@@ -28,8 +28,7 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_collision_monitor_internal
 
-    bool DefaultCollisionPairFilterStrategy::ShouldEvaluate(const CollisionMonitorState& state,
-                                                            const teleop_viewer::RobotScene& scene,
+    bool DefaultCollisionPairFilterStrategy::ShouldEvaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene,
                                                             const teleop_viewer::RobotScene::LinkCollisionProxy& a,
                                                             const teleop_viewer::RobotScene::LinkCollisionProxy& b) const {
         if (state.ignore_same_link && a.link_name == b.link_name) {
@@ -58,8 +57,7 @@ namespace kinematic_viewer {
         }
     }
 
-    CollisionMonitorResult CollisionMonitor::Evaluate(const CollisionMonitorState& state,
-                                                      const teleop_viewer::RobotScene& scene) const {
+    CollisionMonitorResult CollisionMonitor::Evaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene) const {
         CollisionMonitorResult result;
         if (!state.enable || !pair_filter_strategy_) {
             return result;

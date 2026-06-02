@@ -16,8 +16,7 @@ namespace kinematic_viewer {
             std::vector<TreeNode> children;
         };
 
-        void CollectRoots(const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs,
-                          std::vector<TreeNode>* out_roots) {
+        void CollectRoots(const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs, std::vector<TreeNode>* out_roots) {
             if (out_roots == nullptr) {
                 return;
             }
@@ -53,8 +52,7 @@ namespace kinematic_viewer {
                 return true;
             }
             std::string lower = name;
-            std::transform(lower.begin(), lower.end(), lower.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return lower.find(filter_lower) != std::string::npos;
         }
 
@@ -70,15 +68,13 @@ namespace kinematic_viewer {
             return false;
         }
 
-        void DrawTreeNode(const TreeNode& node, ViewerState* ui_state, teleop_viewer::RobotScene* scene,
-                          const std::string& filter_lower) {
+        void DrawTreeNode(const TreeNode& node, ViewerState* ui_state, teleop_viewer::RobotScene* scene, const std::string& filter_lower) {
             if (!TreeNodeMatchesFilter(node, filter_lower)) {
                 return;
             }
 
-            const bool selected = (ui_state->selected_link == node.name);
-            ImGuiTreeNodeFlags flags =
-                ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+            const bool selected      = (ui_state->selected_link == node.name);
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
             if (selected) {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
@@ -125,8 +121,7 @@ namespace kinematic_viewer {
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputText("过滤", ui_state->tree_filter, sizeof(ui_state->tree_filter));
         std::string filter = ui_state->tree_filter;
-        std::transform(filter.begin(), filter.end(), filter.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(filter.begin(), filter.end(), filter.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         const auto tfs = scene->getLinkTfInfos();
         std::vector<TreeNode> roots;
@@ -145,10 +140,9 @@ namespace kinematic_viewer {
         if (ImGui::TreeNode("关节列表")) {
             const auto joints = scene->getJointInfos();
             for (int i = 0; i < static_cast<int>(joints.size()); ++i) {
-                const auto& j = joints[static_cast<size_t>(i)];
+                const auto& j   = joints[static_cast<size_t>(i)];
                 std::string key = j.name;
-                std::transform(key.begin(), key.end(), key.begin(),
-                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                 if (!filter.empty() && key.find(filter) == std::string::npos) {
                     continue;
                 }

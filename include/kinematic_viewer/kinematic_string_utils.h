@@ -36,8 +36,7 @@ namespace kinematic_viewer {
     std::string FormatPoseInputXyzQuat(const glm::vec3& pos, const glm::quat& quat);
 
     // Planar base: x,y,yaw (yaw in radians unless yaw_is_deg is true).
-    bool ParsePoseInputXyYaw(const char* text, float* out_x, float* out_y, float* out_yaw, bool yaw_is_deg,
-                             std::string* out_error);
+    bool ParsePoseInputXyYaw(const char* text, float* out_x, float* out_y, float* out_yaw, bool yaw_is_deg, std::string* out_error);
 
     std::string FormatPoseInputXyYaw(float x, float y, float yaw_rad, bool yaw_as_deg);
 

@@ -27,9 +27,48 @@ ui:
   enable_mobile_base_drag: true
   # Match URDF filename substrings (case-insensitive), e.g. galbot_one_golf.urdf
   mobile_base_robots: ["galbot_g1", "galbot_one_golf", "galbot"]
+  # Sidebar panel registration (order defines tab order).
+  sidebar_panels: ["scene", "ik", "playback", "safety", "joint", "tf", "obstacle", "planner", "teach", "point_cloud"]
 
 ros:
   enable: false
+
+# PCD 点云（map 坐标系）；文件路径相对仓库根目录
+point_cloud:
+  enable: false
+  visible: true
+  auto_load_on_start: false
+  file_path: "global_cloud.pcd"
+  voxel_size: 0.05
+  max_points: 500000
+  x_min: -100.0
+  x_max: 100.0
+  y_min: -100.0
+  y_max: 100.0
+  z_min: -1.0
+  z_max: 2.0
+  offset_x: 0.0
+  offset_y: 0.0
+  offset_yaw: 0.0
+  point_size_px: 2.0      # ESDF 栅格模式建议 5~8
+  color_mode: "height"  # flat | height | intensity
+  # 从 PCD 占据栅格 + 欧氏距离变换构建 ESDF（参考 aphropm load_ESDFMap(.pcd)）
+  build_esdf: false
+  esdf_resolution: 0.05
+  esdf_map_origin: [-30.0, -20.0, -0.1]
+  esdf_map_size: [60.0, 40.0, 2.1]
+  esdf_use_fixed_map: true
+  esdf_visual_mode: "occupied"   # occupied | surface | distance
+  esdf_color_mode: "height"      # flat | height | distance
+  esdf_max_visual_dist: 0.15
+  esdf_visual_stride: 2   # occupied 模式也生效，越大越快、越稀疏
+  esdf_z_slice_enable: false
+  esdf_z_slice_m: 0.5
+  esdf_use_raycast: true
+  esdf_ray_origin_auto: true
+  esdf_ray_origin: [0.0, 0.0, 0.0]
+  esdf_min_ray_length: 0.1
+  esdf_max_ray_length: 50.0
 
 initial_pose:
   enable: true

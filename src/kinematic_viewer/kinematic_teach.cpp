@@ -38,8 +38,7 @@ namespace kinematic_viewer {
                 }
                 *position = tf.world_position;
                 const glm::vec3 rpy_rad(tf.world_rpy.x, tf.world_rpy.y, tf.world_rpy.z);
-                *orientation =
-                    glm::normalize(glm::quat(glm::vec3(rpy_rad.x, rpy_rad.y, rpy_rad.z)));
+                *orientation = glm::normalize(glm::quat(glm::vec3(rpy_rad.x, rpy_rad.y, rpy_rad.z)));
                 return true;
             }
             return false;
@@ -173,8 +172,8 @@ namespace kinematic_viewer {
                 point.joints[joint.name] = joint.position;
             }
         }
-        float base_x = 0.0f;
-        float base_y = 0.0f;
+        float base_x   = 0.0f;
+        float base_y   = 0.0f;
         float base_yaw = 0.0f;
         if (scene.getVirtualBasePose2D(&base_x, &base_y, &base_yaw)) {
             point.has_base_pose_2d = true;
@@ -186,10 +185,10 @@ namespace kinematic_viewer {
             glm::vec3 pos;
             glm::quat quat;
             if (kinematic_teach_internal::FindLinkWorldPose(scene, ee_tip_link, &pos, &quat)) {
-                point.has_ee_pose      = true;
-                point.ee_tip_link      = ee_tip_link;
-                point.ee_position      = pos;
-                point.ee_orientation   = quat;
+                point.has_ee_pose    = true;
+                point.ee_tip_link    = ee_tip_link;
+                point.ee_position    = pos;
+                point.ee_orientation = quat;
             }
         }
         teach->points.push_back(std::move(point));
@@ -212,8 +211,7 @@ namespace kinematic_viewer {
     }
 
     void RemoveSelectedTeachPoint(TeachProgramState* teach) {
-        if (teach == nullptr || teach->selected_point_index < 0 ||
-            teach->selected_point_index >= static_cast<int>(teach->points.size())) {
+        if (teach == nullptr || teach->selected_point_index < 0 || teach->selected_point_index >= static_cast<int>(teach->points.size())) {
             return;
         }
         teach->points.erase(teach->points.begin() + teach->selected_point_index);
@@ -260,8 +258,8 @@ namespace kinematic_viewer {
             for (const auto& point : teach.points) {
                 file << "  - name: " << kinematic_teach_internal::YamlQuote(point.name) << "\n";
                 if (!joint_names.empty()) {
-                    kinematic_teach_internal::WriteYamlFloatFlowList(
-                        file, "q", kinematic_teach_internal::JointVectorForPoint(point, joint_names), 4);
+                    kinematic_teach_internal::WriteYamlFloatFlowList(file, "q",
+                                                                     kinematic_teach_internal::JointVectorForPoint(point, joint_names), 4);
                 }
                 if (point.has_base_pose_2d) {
                     file << "    chassis: [" << std::setprecision(8) << point.base_x_m << ", " << point.base_y_m << ", "
@@ -269,10 +267,9 @@ namespace kinematic_viewer {
                 }
                 if (point.has_ee_pose) {
                     file << "    ee_tip_link: " << kinematic_teach_internal::YamlQuote(point.ee_tip_link) << "\n";
-                    file << "    ee_pos: [" << point.ee_position.x << ", " << point.ee_position.y << ", " << point.ee_position.z
-                         << "]\n";
-                    file << "    ee_quat: [" << point.ee_orientation.w << ", " << point.ee_orientation.x << ", "
-                         << point.ee_orientation.y << ", " << point.ee_orientation.z << "]\n";
+                    file << "    ee_pos: [" << point.ee_position.x << ", " << point.ee_position.y << ", " << point.ee_position.z << "]\n";
+                    file << "    ee_quat: [" << point.ee_orientation.w << ", " << point.ee_orientation.x << ", " << point.ee_orientation.y
+                         << ", " << point.ee_orientation.z << "]\n";
                 }
             }
             if (error_message != nullptr) {
@@ -384,7 +381,7 @@ namespace kinematic_viewer {
         float time_offset = 0.0f;
         for (size_t seg = 1; seg < teach.points.size(); ++seg) {
             JointSpacePTPParams params;
-            params.joint_names      = joint_names;
+            params.joint_names     = joint_names;
             params.start_positions = kinematic_teach_internal::JointVectorForPoint(teach.points[seg - 1], joint_names);
             params.goal_positions  = kinematic_teach_internal::JointVectorForPoint(teach.points[seg], joint_names);
             params.max_vel         = teach.movej_max_vel;
@@ -407,10 +404,9 @@ namespace kinematic_viewer {
         }
         combined.success = !combined.joint_positions.empty();
         if (status_message != nullptr) {
-            *status_message =
-                combined.success ? ("moveJ 成功: " + std::to_string(combined.times.size()) + " 点, 时长 " +
-                                    std::to_string(combined.times.empty() ? 0.0f : combined.times.back()) + "s")
-                                 : "moveJ 失败";
+            *status_message = combined.success ? ("moveJ 成功: " + std::to_string(combined.times.size()) + " 点, 时长 " +
+                                                  std::to_string(combined.times.empty() ? 0.0f : combined.times.back()) + "s")
+                                               : "moveJ 失败";
         }
         return combined;
     }
@@ -447,7 +443,7 @@ namespace kinematic_viewer {
             params.delta_t    = teach.movel_delta_t;
             params.profile    = "DSVP";
 
-            auto planner = makeStraightPlanner(params);
+            auto planner                      = makeStraightPlanner(params);
             const CartesianPathResult segment = planner->plan(p0.ee_position, p0.ee_orientation);
             if (!segment.success || segment.waypoints.empty()) {
                 if (status_message != nullptr) {
@@ -476,8 +472,7 @@ namespace kinematic_viewer {
         return combined;
     }
 
-    bool LoadJointTrajectoryIntoPlayback(const JointSpaceTrajectory& traj, DebugPlaybackState* playback_state,
-                                           std::string* error_message) {
+    bool LoadJointTrajectoryIntoPlayback(const JointSpaceTrajectory& traj, DebugPlaybackState* playback_state, std::string* error_message) {
         if (playback_state == nullptr) {
             if (error_message != nullptr) {
                 *error_message = "playback state is null";
@@ -508,8 +503,8 @@ namespace kinematic_viewer {
         return true;
     }
 
-    bool LoadTeachPointsIntoPlayback(const TeachProgramState& teach, float seconds_per_segment,
-                                     DebugPlaybackState* playback_state, std::string* error_message) {
+    bool LoadTeachPointsIntoPlayback(const TeachProgramState& teach, float seconds_per_segment, DebugPlaybackState* playback_state,
+                                     std::string* error_message) {
         if (playback_state == nullptr || teach.points.empty()) {
             if (error_message != nullptr) {
                 *error_message = "无示教点";
@@ -517,11 +512,11 @@ namespace kinematic_viewer {
             return false;
         }
         playback_state->keyframes.clear();
-        float t = 0.0f;
+        float t        = 0.0f;
         const float dt = std::max(0.02f, seconds_per_segment);
         for (const auto& point : teach.points) {
             PoseKeyframe kf;
-            kf.t = static_cast<double>(t);
+            kf.t      = static_cast<double>(t);
             kf.joints = point.joints;
             if (point.has_base_pose_2d) {
                 kf.has_base_pose_2d = true;

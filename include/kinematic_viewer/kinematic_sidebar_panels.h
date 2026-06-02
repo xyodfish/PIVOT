@@ -16,15 +16,14 @@ namespace kinematic_viewer {
 
     void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene = nullptr);
     void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, teleop_viewer::RobotScene* scene);
-    void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
-                                  teleop_viewer::OrbitCamera* camera, const CollisionMonitorState* collisionState,
-                                  const CollisionMonitorResult* collisionResult, DebugPlaybackState* playbackState,
-                                  CollisionMonitor* collisionMonitor, LinkKinematicsAnalyzer* kinematicsAnalyzer);
+    void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene, teleop_viewer::OrbitCamera* camera,
+                                  const CollisionMonitorState* collisionState, const CollisionMonitorResult* collisionResult,
+                                  DebugPlaybackState* playbackState, CollisionMonitor* collisionMonitor,
+                                  LinkKinematicsAnalyzer* kinematicsAnalyzer);
     void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
                           const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             teleop_viewer::RobotScene* scene,
-                             const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
+                             teleop_viewer::RobotScene* scene, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
     void RenderSafetyPanel(CollisionMonitorState* collisionState, const CollisionMonitorResult& collisionResult);
     void RenderObstaclePanel(ViewerState* uiState);
     void RenderTfPanel(ViewerState* uiState, const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs);
@@ -40,19 +39,19 @@ namespace kinematic_viewer {
         std::vector<CartesianWaypoint> preview_waypoints;
 
         // Circle params
-        float circle_center[3] = {0.0f, 0.0f, 0.0f};
+        float circle_center[3]             = {0.0f, 0.0f, 0.0f};
         bool circle_center_use_current_tip = true;
-        float circle_radius    = 0.1f;
-        float circle_period    = 4.0f;
-        int circle_points      = 60;
+        float circle_radius                = 0.1f;
+        float circle_period                = 4.0f;
+        int circle_points                  = 60;
 
         // Square params
-        float square_center[3] = {0.0f, 0.0f, 0.0f};
+        float square_center[3]             = {0.0f, 0.0f, 0.0f};
         bool square_center_use_current_tip = true;
-        float square_side      = 0.15f;
-        float square_corner_r  = 0.02f;
-        float square_period    = 4.0f;
-        int square_points      = 80;
+        float square_side                  = 0.15f;
+        float square_corner_r              = 0.02f;
+        float square_period                = 4.0f;
+        int square_points                  = 80;
 
         // Head bob params
         float head_pitch_amp_deg = 15.0f;
@@ -60,12 +59,12 @@ namespace kinematic_viewer {
         int head_points          = 40;
 
         // Straight line params
-        bool straight_use_relative = true;
-        float straight_goal[3] = {0.0f, 0.0f, 0.0f};
-        float straight_offset[3] = {0.0f, 0.0f, 0.0f};
+        bool straight_use_relative       = true;
+        float straight_goal[3]           = {0.0f, 0.0f, 0.0f};
+        float straight_offset[3]         = {0.0f, 0.0f, 0.0f};
         float straight_rot_offset_deg[3] = {0.0f, 0.0f, 0.0f};  // Relative RPY offset
-        float straight_max_vel = 0.2f;
-        float straight_max_acc = 0.1f;
+        float straight_max_vel           = 0.2f;
+        float straight_max_acc           = 0.1f;
 
         // Joint-space PTP params
         float ptp_max_vel  = 1.0f;   // rad/s or m/s
@@ -83,7 +82,7 @@ namespace kinematic_viewer {
         char export_name[128] = "planned_trajectory.csv";
 
         // Planning execution state (defer heavy planning by one frame for UI feedback).
-        bool planning_pending = false;
+        bool planning_pending         = false;
         bool planning_defer_one_frame = false;
     };
 

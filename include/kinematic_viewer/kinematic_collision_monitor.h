@@ -26,7 +26,7 @@ namespace kinematic_viewer {
 
     class CollisionPairFilterStrategy {
        public:
-        virtual ~CollisionPairFilterStrategy()                                                              = default;
+        virtual ~CollisionPairFilterStrategy()                                                    = default;
         virtual bool ShouldEvaluate(const CollisionMonitorState& state, const teleop_viewer::RobotScene& scene,
                                     const teleop_viewer::RobotScene::LinkCollisionProxy& a,
                                     const teleop_viewer::RobotScene::LinkCollisionProxy& b) const = 0;

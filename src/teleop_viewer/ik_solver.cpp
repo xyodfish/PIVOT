@@ -50,8 +50,8 @@ namespace teleop_viewer {
             if (q.size() < 7 || x_m == nullptr || y_m == nullptr || yaw_rad == nullptr) {
                 return false;
             }
-            *x_m   = static_cast<float>(q[0]);
-            *y_m   = static_cast<float>(q[1]);
+            *x_m            = static_cast<float>(q[0]);
+            *y_m            = static_cast<float>(q[1]);
             const double qx = q[3];
             const double qy = q[4];
             const double qz = q[5];
@@ -60,14 +60,13 @@ namespace teleop_viewer {
             return true;
         }
 
-        std::vector<Wbc::Index> buildWbcFixedVelocityIndices(const std::vector<int>& lockedVIndex,
-                                                             const std::vector<int>& planarBaseVIndex, bool lockPlanarBase) {
+        std::vector<Wbc::Index> buildWbcFixedVelocityIndices(const std::vector<int>& lockedVIndex, const std::vector<int>& planarBaseVIndex,
+                                                             bool lockPlanarBase) {
             std::vector<Wbc::Index> fixed;
             fixed.reserve(lockedVIndex.size());
             for (const int idx : lockedVIndex) {
                 if (!lockPlanarBase) {
-                    const bool isPlanar =
-                        std::find(planarBaseVIndex.begin(), planarBaseVIndex.end(), idx) != planarBaseVIndex.end();
+                    const bool isPlanar = std::find(planarBaseVIndex.begin(), planarBaseVIndex.end(), idx) != planarBaseVIndex.end();
                     if (isPlanar) {
                         continue;
                     }
@@ -810,20 +809,17 @@ namespace teleop_viewer {
             // Allow larger chassis steps on drag-end solve; realtime drag stays conservative.
             const double basePosDelta = fastMode ? 0.08 : 0.20;
             const double baseYawDelta = fastMode ? 0.12 : 0.30;
-            float curX = 0.0f;
-            float curY = 0.0f;
-            float curYaw = 0.0f;
-            float tgtX = 0.0f;
-            float tgtY = 0.0f;
-            float tgtYaw = 0.0f;
+            float curX                = 0.0f;
+            float curY                = 0.0f;
+            float curYaw              = 0.0f;
+            float tgtX                = 0.0f;
+            float tgtY                = 0.0f;
+            float tgtYaw              = 0.0f;
             if (floatingBaseQToVirtualBase2D(qCurrent, &curX, &curY, &curYaw) &&
                 floatingBaseQToVirtualBase2D(qSolved, &tgtX, &tgtY, &tgtYaw)) {
-                const float x =
-                    curX + std::clamp(tgtX - curX, static_cast<float>(-basePosDelta), static_cast<float>(basePosDelta));
-                const float y =
-                    curY + std::clamp(tgtY - curY, static_cast<float>(-basePosDelta), static_cast<float>(basePosDelta));
-                const float yaw =
-                    curYaw + std::clamp(tgtYaw - curYaw, static_cast<float>(-baseYawDelta), static_cast<float>(baseYawDelta));
+                const float x   = curX + std::clamp(tgtX - curX, static_cast<float>(-basePosDelta), static_cast<float>(basePosDelta));
+                const float y   = curY + std::clamp(tgtY - curY, static_cast<float>(-basePosDelta), static_cast<float>(basePosDelta));
+                const float yaw = curYaw + std::clamp(tgtYaw - curYaw, static_cast<float>(-baseYawDelta), static_cast<float>(baseYawDelta));
                 virtualBase2DToFloatingBaseQ(x, y, yaw, &qOut);
             }
         }
@@ -938,8 +934,9 @@ namespace teleop_viewer {
             }
 
             const bool lockFloatingBase = scene->fixedBaseMode();
-            flex_ik::Vector qApply =
-                fastMode ? wbcResult.solution : limitWbcFullBodyStep(qCurrent, wbcResult.solution, false, positionOnlyMode, lockFloatingBase);
+            flex_ik::Vector qApply      = fastMode
+                                              ? wbcResult.solution
+                                              : limitWbcFullBodyStep(qCurrent, wbcResult.solution, false, positionOnlyMode, lockFloatingBase);
             if (lockFloatingBase && fullBodyWbcHasFloatingBase_ && qApply.size() >= 7) {
                 virtualBase2DToFloatingBaseQ(0.0f, 0.0f, 0.0f, &qApply);
             }

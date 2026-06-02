@@ -39,6 +39,15 @@ namespace kinematic_viewer {
             out.z = node[key][2].as<float>();
         }
 
+        void ReadFloat3(const YAML::Node& node, const char* key, float out[3]) {
+            if (!node || !node[key] || !node[key].IsSequence() || node[key].size() < 3) {
+                return;
+            }
+            out[0] = node[key][0].as<float>();
+            out[1] = node[key][1].as<float>();
+            out[2] = node[key][2].as<float>();
+        }
+
         void ReadStringListFromItem(const YAML::Node& item, const char* key, std::vector<std::string>& out) {
             if (!item || !item[key] || !item[key].IsSequence()) {
                 return;
@@ -83,7 +92,7 @@ namespace kinematic_viewer {
             }
 
             static const std::unordered_set<std::string> kAllowedKeys = {
-                "window", "robot", "camera", "ui", "ik", "ros", "initial_pose", "playback", "teach",
+                "window", "robot", "camera", "ui", "ik", "ros", "point_cloud", "initial_pose", "playback", "teach",
             };
 
             std::vector<std::string> unknown;
@@ -146,12 +155,47 @@ namespace kinematic_viewer {
             ReadScalar(root["ui"], "theme_preset", cfg.ui.theme_preset);
             ReadScalar(root["ui"], "enable_mobile_base_drag", cfg.ui.enable_mobile_base_drag);
             ReadStringListFromItem(root["ui"], "mobile_base_robots", cfg.ui.mobile_base_robots);
+            ReadStringListFromItem(root["ui"], "sidebar_panels", cfg.ui.sidebar_panels);
 
             ReadScalar(root["ik"], "mode", cfg.ik.mode);
             ReadScalar(root["ik"], "full_body_backend", cfg.ik.full_body_backend);
             ReadScalar(root["ik"], "full_body_iterations", cfg.ik.full_body_iterations);
             ReadIkChainList(root["ik"], "chains", cfg.ik.chains);
             ReadScalar(root["ros"], "enable", cfg.ros.enable);
+
+            ReadScalar(root["point_cloud"], "enable", cfg.point_cloud.enable);
+            ReadScalar(root["point_cloud"], "visible", cfg.point_cloud.visible);
+            ReadScalar(root["point_cloud"], "auto_load_on_start", cfg.point_cloud.auto_load_on_start);
+            ReadScalar(root["point_cloud"], "file_path", cfg.point_cloud.file_path);
+            ReadScalar(root["point_cloud"], "voxel_size", cfg.point_cloud.voxel_size);
+            ReadScalar(root["point_cloud"], "max_points", cfg.point_cloud.max_points);
+            ReadScalar(root["point_cloud"], "x_min", cfg.point_cloud.x_min);
+            ReadScalar(root["point_cloud"], "x_max", cfg.point_cloud.x_max);
+            ReadScalar(root["point_cloud"], "y_min", cfg.point_cloud.y_min);
+            ReadScalar(root["point_cloud"], "y_max", cfg.point_cloud.y_max);
+            ReadScalar(root["point_cloud"], "z_min", cfg.point_cloud.z_min);
+            ReadScalar(root["point_cloud"], "z_max", cfg.point_cloud.z_max);
+            ReadScalar(root["point_cloud"], "offset_x", cfg.point_cloud.offset_x);
+            ReadScalar(root["point_cloud"], "offset_y", cfg.point_cloud.offset_y);
+            ReadScalar(root["point_cloud"], "offset_yaw", cfg.point_cloud.offset_yaw);
+            ReadScalar(root["point_cloud"], "point_size_px", cfg.point_cloud.point_size_px);
+            ReadScalar(root["point_cloud"], "color_mode", cfg.point_cloud.color_mode);
+            ReadScalar(root["point_cloud"], "build_esdf", cfg.point_cloud.build_esdf);
+            ReadScalar(root["point_cloud"], "esdf_resolution", cfg.point_cloud.esdf_resolution);
+            ReadFloat3(root["point_cloud"], "esdf_map_origin", cfg.point_cloud.esdf_map_origin);
+            ReadFloat3(root["point_cloud"], "esdf_map_size", cfg.point_cloud.esdf_map_size);
+            ReadScalar(root["point_cloud"], "esdf_use_fixed_map", cfg.point_cloud.esdf_use_fixed_map);
+            ReadScalar(root["point_cloud"], "esdf_max_visual_dist", cfg.point_cloud.esdf_max_visual_dist);
+            ReadScalar(root["point_cloud"], "esdf_visual_stride", cfg.point_cloud.esdf_visual_stride);
+            ReadScalar(root["point_cloud"], "esdf_visual_mode", cfg.point_cloud.esdf_visual_mode);
+            ReadScalar(root["point_cloud"], "esdf_color_mode", cfg.point_cloud.esdf_color_mode);
+            ReadScalar(root["point_cloud"], "esdf_z_slice_enable", cfg.point_cloud.esdf_z_slice_enable);
+            ReadScalar(root["point_cloud"], "esdf_z_slice_m", cfg.point_cloud.esdf_z_slice_m);
+            ReadScalar(root["point_cloud"], "esdf_use_raycast", cfg.point_cloud.esdf_use_raycast);
+            ReadFloat3(root["point_cloud"], "esdf_ray_origin", cfg.point_cloud.esdf_ray_origin);
+            ReadScalar(root["point_cloud"], "esdf_ray_origin_auto", cfg.point_cloud.esdf_ray_origin_auto);
+            ReadScalar(root["point_cloud"], "esdf_min_ray_length", cfg.point_cloud.esdf_min_ray_length);
+            ReadScalar(root["point_cloud"], "esdf_max_ray_length", cfg.point_cloud.esdf_max_ray_length);
 
             ReadScalar(root["initial_pose"], "enable", cfg.initial_pose.enable);
             ReadScalar(root["initial_pose"], "auto_apply_on_start", cfg.initial_pose.auto_apply_on_start);

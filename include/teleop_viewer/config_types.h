@@ -62,6 +62,10 @@ namespace teleop_viewer {
         // Enable planar chassis gizmo only for robots matched by keywords.
         bool enable_mobile_base_drag                = true;
         std::vector<std::string> mobile_base_robots = {"galbot_g1"};
+        // Sidebar panel ids shown in tabs (order defines tab order).
+        // Supported ids: scene, ik, playback, safety, joint, tf, obstacle, planner, teach, point_cloud.
+        std::vector<std::string> sidebar_panels = {
+            "scene", "ik", "playback", "safety", "joint", "tf", "obstacle", "planner", "teach", "point_cloud"};
     };
 
     struct ViewerIkChainConfig {

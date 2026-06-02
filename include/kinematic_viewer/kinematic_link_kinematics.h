@@ -11,9 +11,9 @@
 namespace kinematic_viewer {
 
     struct LinkKinematicsMetrics {
-        bool valid                    = false;
-        float translational_manip     = 0.0f;
-        float jacobian_condition_6d   = -1.0f;
+        bool valid                  = false;
+        float translational_manip   = 0.0f;
+        float jacobian_condition_6d = -1.0f;
         std::string error;
     };
 

@@ -37,8 +37,7 @@ namespace kinematic_viewer {
         }
     }
 
-    bool LinkKinematicsAnalyzer::compute(const teleop_viewer::RobotScene& scene, const std::string& link_name,
-                                         LinkKinematicsMetrics* out) {
+    bool LinkKinematicsAnalyzer::compute(const teleop_viewer::RobotScene& scene, const std::string& link_name, LinkKinematicsMetrics* out) {
         if (out == nullptr) {
             return false;
         }
@@ -86,7 +85,7 @@ namespace kinematic_viewer {
         const Eigen::MatrixXd Jt_pos = J.topRows(3);
         const Eigen::Matrix3d JJt    = Jt_pos * Jt_pos.transpose();
         const double det             = JJt.determinant();
-        out->translational_manip      = det > 0.0 ? static_cast<float>(std::sqrt(det)) : 0.0f;
+        out->translational_manip     = det > 0.0 ? static_cast<float>(std::sqrt(det)) : 0.0f;
 
         const int sv_count = static_cast<int>(std::min(static_cast<Eigen::Index>(6), J.rows()));
         if (sv_count > 0 && model_.nv > 0) {

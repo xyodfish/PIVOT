@@ -118,8 +118,7 @@ namespace kinematic_viewer {
     // IK solver wrapper for path planning (full body mode)
     // Uses solveFullBody for better multi-chain coordination and solve quality
     // Other chains keep their current pose while the active chain follows the path
-    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path,
-                                                         teleop_viewer::RobotScene* scene,
+    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
                                                          teleop_viewer::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb = nullptr);
 

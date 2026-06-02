@@ -6,6 +6,7 @@
 #include "kinematic_viewer/kinematic_marker_utils.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
+#include "kinematic_viewer/kinematic_point_cloud.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
 #include "teleop_viewer/scene.h"
 
@@ -24,15 +25,18 @@ namespace kinematic_viewer {
             int viewport_w = 0;
             int viewport_h = 0;
 
-            GLuint mesh_shader = 0;
-            GLuint line_shader = 0;
+            GLuint mesh_shader  = 0;
+            GLuint line_shader  = 0;
+            GLuint point_shader = 0;
 
-            teleop_viewer::RobotScene* scene     = nullptr;
-            const ViewerState* ui_state                    = nullptr;
-            const IkState* ik_state                        = nullptr;
-            const CollisionMonitorState* collision_state   = nullptr;
-            const CollisionMonitorResult* collision_result = nullptr;
-            const UserObstacleGpuMeshes* obstacle_meshes   = nullptr;
+            teleop_viewer::RobotScene* scene                  = nullptr;
+            const PointCloudUiState* point_cloud              = nullptr;
+            const KinematicPointCloudLayer* point_cloud_layer = nullptr;
+            const ViewerState* ui_state                       = nullptr;
+            const IkState* ik_state                           = nullptr;
+            const CollisionMonitorState* collision_state      = nullptr;
+            const CollisionMonitorResult* collision_result    = nullptr;
+            const UserObstacleGpuMeshes* obstacle_meshes      = nullptr;
 
             const teleop_viewer::OrbitCamera* camera = nullptr;
 
@@ -54,6 +58,7 @@ namespace kinematic_viewer {
         void SetupMeshShaderUniforms(GLuint shader, const glm::mat4& proj, const glm::mat4& view, const glm::vec3& eye);
         void DrawSceneMeshes(GLuint shader, const Context& ctx, const glm::mat4& proj, const glm::mat4& view);
         void DrawObstacles(GLuint shader, const Context& ctx, const glm::mat4& view, const glm::mat4& proj);
+        void DrawPointCloud(const Context& ctx, const glm::mat4& view, const glm::mat4& proj);
         void BuildAxisVertices(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildMarkerAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);
         void BuildMobileBaseAxes(const Context& ctx, std::vector<KinematicLineVertex>* out);

@@ -47,8 +47,7 @@ namespace kinematic_viewer {
     }
 
     LinkSafetyInspectInfo BuildLinkSafetyInfo(const std::string& link_name, const CollisionMonitorState& collision_state,
-                                              const CollisionMonitorResult& collision_result,
-                                              const teleop_viewer::RobotScene& scene) {
+                                              const CollisionMonitorResult& collision_result, const teleop_viewer::RobotScene& scene) {
         LinkSafetyInspectInfo info;
         if (collision_result.valid) {
             info.has_global_closest = true;
@@ -103,8 +102,8 @@ namespace kinematic_viewer {
         for (const auto& joint : scene->getJointInfos()) {
             saved_joints[joint.name] = joint.position;
         }
-        float saved_base_x = 0.0f;
-        float saved_base_y = 0.0f;
+        float saved_base_x   = 0.0f;
+        float saved_base_y   = 0.0f;
         float saved_base_yaw = 0.0f;
         scene->getVirtualBasePose2D(&saved_base_x, &saved_base_y, &saved_base_yaw);
 
@@ -157,7 +156,7 @@ namespace kinematic_viewer {
         ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s", link_name.c_str());
         if (ImGui::SmallButton("清除")) {
             ui_state->selected_link.clear();
-            ui_state->selected_joint = -1;
+            ui_state->selected_joint           = -1;
             ui_state->trajectory_min_surface_m = -1.0f;
             return;
         }
@@ -171,8 +170,8 @@ namespace kinematic_viewer {
 
         std::string parent_joint_name;
         teleop_viewer::RobotScene::JointDetailInfo joint_detail;
-        const bool has_joint = scene->getParentJointNameForLink(link_name, &parent_joint_name) &&
-                               scene->getJointDetail(parent_joint_name, &joint_detail);
+        const bool has_joint =
+            scene->getParentJointNameForLink(link_name, &parent_joint_name) && scene->getJointDetail(parent_joint_name, &joint_detail);
 
         if (ImGui::CollapsingHeader("关节", ImGuiTreeNodeFlags_DefaultOpen) && has_joint) {
             ImGui::Text("joint: %s  type: %s", parent_joint_name.c_str(), joint_detail.type.c_str());
@@ -194,9 +193,10 @@ namespace kinematic_viewer {
         if (ImGui::CollapsingHeader("运动学")) {
             glm::mat4 world_tf(1.0f);
             if (scene->getLinkWorldTransform(link_name, &world_tf)) {
-                const glm::vec3 pos  = glm::vec3(world_tf[3]);
+                const glm::vec3 pos     = glm::vec3(world_tf[3]);
                 const glm::vec3 rpy_rad = glm::eulerAngles(glm::normalize(glm::quat_cast(world_tf)));
-                const glm::vec3 rpy_ui(AngleUiFromRad(rpy_rad.x, ui_state->angle_unit_deg), AngleUiFromRad(rpy_rad.y, ui_state->angle_unit_deg),
+                const glm::vec3 rpy_ui(AngleUiFromRad(rpy_rad.x, ui_state->angle_unit_deg),
+                                       AngleUiFromRad(rpy_rad.y, ui_state->angle_unit_deg),
                                        AngleUiFromRad(rpy_rad.z, ui_state->angle_unit_deg));
                 ImGui::Text("pos: %.3f, %.3f, %.3f m", pos.x, pos.y, pos.z);
                 ImGui::Text("rpy: %.2f, %.2f, %.2f %s", rpy_ui.x, rpy_ui.y, rpy_ui.z, AngleUnitLabel(ui_state->angle_unit_deg));
@@ -207,8 +207,8 @@ namespace kinematic_viewer {
                 static LinkKinematicsMetrics metrics_cache;
                 static double metrics_last_sec = -1.0;
                 const double now_sec           = ImGui::GetTime();
-                const bool need_refresh        = metrics_link != link_name || metrics_last_sec < 0.0 ||
-                                          (now_sec - metrics_last_sec) >= kKinematicsRefreshSec;
+                const bool need_refresh =
+                    metrics_link != link_name || metrics_last_sec < 0.0 || (now_sec - metrics_last_sec) >= kKinematicsRefreshSec;
                 if (need_refresh) {
                     metrics_cache = LinkKinematicsMetrics{};
                     if (kinematics_analyzer->compute(*scene, link_name, &metrics_cache)) {
@@ -230,8 +230,7 @@ namespace kinematic_viewer {
         }
 
         if (ImGui::CollapsingHeader("安全") && collision_state != nullptr && collision_result != nullptr) {
-            const LinkSafetyInspectInfo safety =
-                BuildLinkSafetyInfo(link_name, *collision_state, *collision_result, *scene);
+            const LinkSafetyInspectInfo safety = BuildLinkSafetyInfo(link_name, *collision_state, *collision_result, *scene);
 
             if (safety.has_pair_involving_link) {
                 ImGui::Text("%s <-> %s", safety.pair_involving_link.link_a.c_str(), safety.pair_involving_link.link_b.c_str());

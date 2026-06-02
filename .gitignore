@@ -1,5 +1,8 @@
 build/
 bin/
+lib/
 build_cmake_test/
 build_shared_test/
 robot_kinematic_viewer_release/
+sessions/
+/tmp/rkv_config_*.yaml

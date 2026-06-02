@@ -24,8 +24,8 @@ namespace kinematic_viewer {
         };
 
         struct LinkPickResult {
-            bool picked             = false;
-            bool throttle_skip      = false;  // true: caller should keep previous hover
+            bool picked        = false;
+            bool throttle_skip = false;  // true: caller should keep previous hover
             std::string link_name;
         };
 
@@ -73,24 +73,24 @@ namespace kinematic_viewer {
         LinkPickResult UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
                                        teleop_viewer::RobotScene* scene, double now_sec);
 
-        // Handle sidebar page hotkeys (1-7).
-        int HandleSidebarHotkeys(int current_page, bool enable_hotkeys);
+        // Handle sidebar page hotkeys (1-9), bounded by visible tab count.
+        int HandleSidebarHotkeys(int current_page, int page_count, bool enable_hotkeys);
 
         // Reset internal mouse tracking (e.g., after window focus change).
         void ResetMouseTracking();
 
        private:
-        double prev_mouse_x_          = 0.0;
-        double prev_mouse_y_          = 0.0;
-        bool first_mouse_             = true;
-        bool obstacle_pick_left_prev_ = false;
-        bool link_pick_left_prev_      = false;
-        bool link_pick_drag_tracking_  = false;
-        double link_pick_press_x_      = 0.0;
-        double link_pick_press_y_      = 0.0;
-        double link_hover_last_sec_    = -1.0;
-        static constexpr double kLinkHoverIntervalSec      = 0.05;
-        static constexpr double kLinkPickDragThresholdPx   = 6.0;
+        double prev_mouse_x_                             = 0.0;
+        double prev_mouse_y_                             = 0.0;
+        bool first_mouse_                                = true;
+        bool obstacle_pick_left_prev_                    = false;
+        bool link_pick_left_prev_                        = false;
+        bool link_pick_drag_tracking_                    = false;
+        double link_pick_press_x_                        = 0.0;
+        double link_pick_press_y_                        = 0.0;
+        double link_hover_last_sec_                      = -1.0;
+        static constexpr double kLinkHoverIntervalSec    = 0.05;
+        static constexpr double kLinkPickDragThresholdPx = 6.0;
 
         bool IsMouseInViewport(double x, double y, int viewport_w, int viewport_h) const;
     };

@@ -81,8 +81,8 @@ namespace kinematic_viewer {
         target.initialized = true;
     }
 
-    bool KinematicIkController::ApplyIkForActiveChain(teleop_viewer::RobotScene* scene, bool force_orientation_lock,
-                                                      bool fast_mode, bool prefer_position_only_target) {
+    bool KinematicIkController::ApplyIkForActiveChain(teleop_viewer::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
+                                                      bool prefer_position_only_target) {
         if (!ik_state_ || !scene || ik_state_->selected_chain < 0 ||
             ik_state_->selected_chain >= static_cast<int>(ik_state_->chains.size())) {
             if (ik_state_) {

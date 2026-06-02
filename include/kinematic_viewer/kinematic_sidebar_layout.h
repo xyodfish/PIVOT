@@ -95,7 +95,7 @@ namespace kinematic_viewer {
     }
 
     inline void SidebarCheckboxRow4(const char* l1, bool* v1, const char* l2, bool* v2, const char* l3, bool* v3, const char* l4,
-                                  bool* v4) {
+                                    bool* v4) {
         const float col_w = (SidebarAvailWidth() - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
         ImGui::Checkbox(l1, v1);
         ImGui::SameLine(col_w);

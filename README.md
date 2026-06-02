@@ -12,6 +12,7 @@
 - [仓库结构](#仓库结构)
 - [依赖环境](#依赖环境)
 - [快速开始](#快速开始)
+- [动态库面板插件](#动态库面板插件)
 - [配置说明](#配置说明)
 - [文档](#文档)
 - [轨迹回放（CSV）](#轨迹回放csv)
@@ -103,7 +104,14 @@ robot_kinematic_viewer/
 
 ## 快速开始
 
-仅编译：
+推荐构建（CMake）：
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+脚本方式构建：
 
 ```bash
 ./build.sh
@@ -127,11 +135,71 @@ robot_kinematic_viewer/
 ./bin/robot_kinematic_viewer config/robot_kinematic_viewer.yaml
 ```
 
+默认启动（不带参数，自动读取 `config/robot_kinematic_viewer.yaml`）：
+
+```bash
+./bin/robot_kinematic_viewer
+```
+
+场景化启动（预置轨迹 / Unitree / 跳舞等，见 `scripts/run_viewer.sh --list`）：
+
+```bash
+./scripts/run_viewer.sh dance
+./scripts/run_viewer.sh --list
+```
+
+调试会话保存与回放（见 [docs/LOG_REPLAY_DESIGN.md](docs/LOG_REPLAY_DESIGN.md)）：
+
+```bash
+./scripts/rkv_session.sh save my_case --note "复现步骤"
+./scripts/run_viewer.sh --session sessions/rkv_...
+```
+
+地图点云（PCD，需 `/opt/galbot/devel` 下 PCL，与 aphropm_cplanner 相同）：
+
+```bash
+# 将 global_cloud.pcd 放在仓库根目录后：
+./scripts/run_viewer.sh map
+# 侧边栏「点云」页可调整体素/裁剪并重新加载
+```
+
 直接指定 URDF 启动：
 
 ```bash
 ./bin/robot_kinematic_viewer /绝对路径/robot.urdf
 ```
+
+---
+
+## 动态库面板插件
+
+侧边栏页面已改为 **动态库插件** 机制。程序启动时会按 `ui.sidebar_panels` 顺序加载 panel：
+
+- 写 `id`：按内置命名加载 `lib/librkv_panel_<id>.so`
+- 写 `.so` 路径：支持绝对路径，或相对插件搜索目录的文件名
+- 默认搜索目录：`<exe>/../lib`、`<exe>/lib`、`<exe>`
+
+示例（内置 panel）：
+
+```yaml
+ui:
+  sidebar_panels: ["scene", "ik", "playback", "safety", "joint", "tf", "obstacle", "planner", "teach", "point_cloud"]
+```
+
+当前内置动态库（构建后位于 `lib/`）：
+
+- `librkv_panel_scene.so`
+- `librkv_panel_ik.so`
+- `librkv_panel_playback.so`
+- `librkv_panel_safety.so`
+- `librkv_panel_joint.so`
+- `librkv_panel_tf.so`
+- `librkv_panel_obstacle.so`
+- `librkv_panel_planner.so`
+- `librkv_panel_teach.so`
+- `librkv_panel_point_cloud.so`
+
+若加载失败，终端会打印 `[RkvPanelRegistry]` 相关错误（如 `.so` 不存在或导出符号缺失）。
 
 ---
 

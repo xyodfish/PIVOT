@@ -373,8 +373,7 @@ namespace kinematic_viewer {
         playbackState->play_time = 0.0f;
     }
 
-    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene,
-                                           double dtSec) const {
+    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene, double dtSec) const {
         if (playbackState == nullptr || scene == nullptr || !interpolator_) {
             return;
         }
@@ -795,9 +794,9 @@ namespace kinematic_viewer {
             playbackState->trajectory_files[static_cast<size_t>(index)].status = "加载失败: " + ioError;
             playbackState->trajectory_files[static_cast<size_t>(index)].loaded = false;
             playbackState->trajectory_io_status                                = "加载失败: " + ioError;
-            playbackState->trajectory_alert_message                            = "轨迹文件加载失败，请检查路径或文件格式。";
-            playbackState->trajectory_alert_detail                             = ioError;
-            playbackState->trajectory_alert_popup_pending                      = true;
+            playbackState->trajectory_alert_message       = "轨迹文件加载失败，请检查路径或文件格式。";
+            playbackState->trajectory_alert_detail        = ioError;
+            playbackState->trajectory_alert_popup_pending = true;
             return false;
         }
 
@@ -820,15 +819,15 @@ namespace kinematic_viewer {
         return true;
     }
 
-    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState,
-                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                      teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
+    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                      TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene,
+                                      PlaybackStateMachine* playback_sm) {
         if (playbackState == nullptr || playbackState->pending_trajectory_load_index < 0) {
             return;
         }
 
-        const int index = playbackState->pending_trajectory_load_index;
-        const bool play = playbackState->pending_trajectory_play_after_load;
+        const int index                                   = playbackState->pending_trajectory_load_index;
+        const bool play                                   = playbackState->pending_trajectory_play_after_load;
         playbackState->pending_trajectory_load_index      = -1;
         playbackState->pending_trajectory_play_after_load = false;
 
@@ -850,12 +849,11 @@ namespace kinematic_viewer {
         playbackState->trajectory_sequence_active = false;
         playbackState->trajectory_sequence_indices.clear();
         playbackState->trajectory_sequence_position = 0;
-        playbackState->loop                           = playbackState->trajectory_sequence_saved_loop;
+        playbackState->loop                         = playbackState->trajectory_sequence_saved_loop;
     }
 
-    void StartTrajectorySequence(DebugPlaybackState* playbackState,
-                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                 teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
+    void StartTrajectorySequence(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                 TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
         if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || playback_sm == nullptr) {
             return;
         }
@@ -871,11 +869,12 @@ namespace kinematic_viewer {
             return;
         }
 
-        playbackState->trajectory_sequence_active       = true;
-        playbackState->trajectory_sequence_position     = 0;
-        playbackState->trajectory_sequence_saved_loop   = playbackState->loop;
-        playbackState->loop                             = false;
-        playbackState->trajectory_io_status             = "连播: 开始 (" + std::to_string(playbackState->trajectory_sequence_indices.size()) + " 个文件)";
+        playbackState->trajectory_sequence_active     = true;
+        playbackState->trajectory_sequence_position   = 0;
+        playbackState->trajectory_sequence_saved_loop = playbackState->loop;
+        playbackState->loop                           = false;
+        playbackState->trajectory_io_status =
+            "连播: 开始 (" + std::to_string(playbackState->trajectory_sequence_indices.size()) + " 个文件)";
 
         while (playbackState->trajectory_sequence_position < playbackState->trajectory_sequence_indices.size()) {
             const int index = playbackState->trajectory_sequence_indices[playbackState->trajectory_sequence_position];
@@ -905,8 +904,8 @@ namespace kinematic_viewer {
             if (LoadTrajectoryListEntry(playbackState, index, joints, playbackPlayer, scene)) {
                 playbackState->play_time = 0.0f;
                 playback_sm->Play();
-                const size_t current = playbackState->trajectory_sequence_position + 1;
-                const size_t total   = playbackState->trajectory_sequence_indices.size();
+                const size_t current                = playbackState->trajectory_sequence_position + 1;
+                const size_t total                  = playbackState->trajectory_sequence_indices.size();
                 playbackState->trajectory_io_status = "连播: " + std::to_string(current) + "/" + std::to_string(total);
                 return;
             }

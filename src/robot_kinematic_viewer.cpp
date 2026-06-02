@@ -6,6 +6,7 @@
 #include "kinematic_viewer/kinematic_line_renderer.h"
 #include "kinematic_viewer/kinematic_marker_target_state.h"
 #include "kinematic_viewer/kinematic_marker_utils.h"
+#include "kinematic_viewer/kinematic_point_cloud.h"
 #include "kinematic_viewer/kinematic_playback.h"
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "kinematic_viewer/kinematic_render_loop.h"
@@ -29,6 +30,8 @@
 #include "kinematic_viewer/kinematic_teach_panel.h"
 #include "kinematic_viewer/kinematic_teach_state.h"
 #include "kinematic_viewer/kinematic_viewer_config.h"
+#include "kinematic_viewer/rkv_panel_plugin.h"
+#include "kinematic_viewer/rkv_panel_registry.h"
 #include "teleop_viewer/ik_solver.h"
 #include "teleop_viewer/scene.h"
 
@@ -50,6 +53,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -61,6 +65,7 @@ using kinematic_viewer::CollisionMonitorResult;
 using kinematic_viewer::CollisionMonitorState;
 using kinematic_viewer::createKinematicLineProgram;
 using kinematic_viewer::createKinematicMeshProgram;
+using kinematic_viewer::createKinematicPointProgram;
 using kinematic_viewer::DebugPlaybackState;
 using kinematic_viewer::DestroyUserObstacleGpuMeshes;
 using kinematic_viewer::distancePointToSegment2D;
@@ -75,22 +80,27 @@ using kinematic_viewer::KinematicIkController;
 using kinematic_viewer::KinematicInputHandler;
 using kinematic_viewer::KinematicLineRenderer;
 using kinematic_viewer::KinematicLineVertex;
+using kinematic_viewer::KinematicPointCloudLayer;
 using kinematic_viewer::KinematicRenderLoop;
 using kinematic_viewer::KinematicUiFeedback;
 using kinematic_viewer::KinematicViewerConfig;
 using kinematic_viewer::LaunchConfig;
 using kinematic_viewer::LinkKinematicsAnalyzer;
 using kinematic_viewer::LoadLaunchConfigFromArgs;
+using kinematic_viewer::LoadTeachProgramFromYaml;
 using kinematic_viewer::markerWorldMatrix;
 using kinematic_viewer::MergeUserObstaclesIntoCollisionResult;
+using kinematic_viewer::PointCloudColorModeFromString;
+using kinematic_viewer::PointCloudLoadOptions;
+using kinematic_viewer::PointCloudUiState;
 using kinematic_viewer::RenderJointPanel;
 using kinematic_viewer::RenderLinkInspectorPanel;
 using kinematic_viewer::RenderObstaclePanel;
 using kinematic_viewer::RenderPlaybackPanel;
+using kinematic_viewer::RenderPointCloudPanel;
 using kinematic_viewer::RenderRobotTreePanel;
 using kinematic_viewer::RenderSafetyPanel;
 using kinematic_viewer::RenderScenePanel;
-using kinematic_viewer::LoadTeachProgramFromYaml;
 using kinematic_viewer::RenderTeachPanel;
 using kinematic_viewer::RenderTfPanel;
 using kinematic_viewer::TeachProgramState;
@@ -226,8 +236,9 @@ int main(int argc, char** argv) {
         kinematic_viewer::ApplyKinematicUiStyleByIndex(ui_theme_index);
     });
 
-    GLuint mesh_shader = createKinematicMeshProgram();
-    GLuint line_shader = createKinematicLineProgram();
+    GLuint mesh_shader  = createKinematicMeshProgram();
+    GLuint line_shader  = createKinematicLineProgram();
+    GLuint point_shader = createKinematicPointProgram();
     KinematicLineRenderer line_renderer;
     line_renderer.init();
 
@@ -284,6 +295,141 @@ int main(int argc, char** argv) {
     appendJointInputGroup("right_arm", cfg.initial_pose.right_arm_joint_names);
     scene.setFixedBaseMode(ui_state.lock_base);
 
+    PointCloudUiState point_cloud_state;
+    KinematicPointCloudLayer point_cloud_layer;
+    point_cloud_state.visible       = cfg.point_cloud.visible;
+    point_cloud_state.voxel_size    = cfg.point_cloud.voxel_size;
+    point_cloud_state.max_points    = cfg.point_cloud.max_points;
+    point_cloud_state.x_min         = cfg.point_cloud.x_min;
+    point_cloud_state.x_max         = cfg.point_cloud.x_max;
+    point_cloud_state.y_min         = cfg.point_cloud.y_min;
+    point_cloud_state.y_max         = cfg.point_cloud.y_max;
+    point_cloud_state.z_min         = cfg.point_cloud.z_min;
+    point_cloud_state.z_max         = cfg.point_cloud.z_max;
+    point_cloud_state.offset_x      = cfg.point_cloud.offset_x;
+    point_cloud_state.offset_y      = cfg.point_cloud.offset_y;
+    point_cloud_state.offset_yaw    = cfg.point_cloud.offset_yaw;
+    point_cloud_state.point_size_px = cfg.point_cloud.point_size_px;
+    if (cfg.point_cloud.color_mode == "intensity") {
+        point_cloud_state.color_mode = 2;
+    } else if (cfg.point_cloud.color_mode == "flat") {
+        point_cloud_state.color_mode = 0;
+    } else {
+        point_cloud_state.color_mode = 1;
+    }
+    point_cloud_state.build_esdf           = cfg.point_cloud.build_esdf;
+    point_cloud_state.esdf_resolution      = cfg.point_cloud.esdf_resolution;
+    point_cloud_state.esdf_map_origin[0]   = cfg.point_cloud.esdf_map_origin[0];
+    point_cloud_state.esdf_map_origin[1]   = cfg.point_cloud.esdf_map_origin[1];
+    point_cloud_state.esdf_map_origin[2]   = cfg.point_cloud.esdf_map_origin[2];
+    point_cloud_state.esdf_map_size[0]     = cfg.point_cloud.esdf_map_size[0];
+    point_cloud_state.esdf_map_size[1]     = cfg.point_cloud.esdf_map_size[1];
+    point_cloud_state.esdf_map_size[2]     = cfg.point_cloud.esdf_map_size[2];
+    point_cloud_state.esdf_use_fixed_map   = cfg.point_cloud.esdf_use_fixed_map;
+    point_cloud_state.esdf_max_visual_dist = cfg.point_cloud.esdf_max_visual_dist;
+    point_cloud_state.esdf_visual_stride   = cfg.point_cloud.esdf_visual_stride;
+    point_cloud_state.esdf_visual_mode     = kinematic_viewer::EsdfVisualModeFromString(cfg.point_cloud.esdf_visual_mode);
+    point_cloud_state.esdf_color_mode      = kinematic_viewer::EsdfColorModeFromString(cfg.point_cloud.esdf_color_mode);
+    point_cloud_state.esdf_z_slice_enable  = cfg.point_cloud.esdf_z_slice_enable;
+    point_cloud_state.esdf_z_slice_m       = cfg.point_cloud.esdf_z_slice_m;
+    point_cloud_state.esdf_use_raycast     = cfg.point_cloud.esdf_use_raycast;
+    point_cloud_state.esdf_ray_origin[0]   = cfg.point_cloud.esdf_ray_origin[0];
+    point_cloud_state.esdf_ray_origin[1]   = cfg.point_cloud.esdf_ray_origin[1];
+    point_cloud_state.esdf_ray_origin[2]   = cfg.point_cloud.esdf_ray_origin[2];
+    point_cloud_state.esdf_ray_origin_auto = cfg.point_cloud.esdf_ray_origin_auto;
+    point_cloud_state.esdf_min_ray_length  = cfg.point_cloud.esdf_min_ray_length;
+    point_cloud_state.esdf_max_ray_length  = cfg.point_cloud.esdf_max_ray_length;
+    if (!cfg.point_cloud.file_path.empty()) {
+        std::snprintf(point_cloud_state.file_path, sizeof(point_cloud_state.file_path), "%s", cfg.point_cloud.file_path.c_str());
+    }
+    if (cfg.point_cloud.enable && cfg.point_cloud.auto_load_on_start && !cfg.point_cloud.file_path.empty()) {
+        std::string pcd_path = cfg.point_cloud.file_path;
+        if (!std::filesystem::path(pcd_path).is_absolute()) {
+            std::filesystem::path resolved;
+            if (!launch.configPath.empty()) {
+                resolved = std::filesystem::path(launch.configPath).parent_path().parent_path() / pcd_path;
+            }
+            if (!resolved.empty() && std::filesystem::exists(resolved)) {
+                pcd_path = resolved.lexically_normal().string();
+            } else if (std::filesystem::exists(pcd_path)) {
+                pcd_path = std::filesystem::absolute(pcd_path).lexically_normal().string();
+            }
+        }
+        PointCloudLoadOptions load_opt;
+        load_opt.voxel_size           = point_cloud_state.voxel_size;
+        load_opt.max_points           = point_cloud_state.max_points;
+        load_opt.x_min                = point_cloud_state.x_min;
+        load_opt.x_max                = point_cloud_state.x_max;
+        load_opt.y_min                = point_cloud_state.y_min;
+        load_opt.y_max                = point_cloud_state.y_max;
+        load_opt.z_min                = point_cloud_state.z_min;
+        load_opt.z_max                = point_cloud_state.z_max;
+        load_opt.color_mode           = PointCloudColorModeFromString(cfg.point_cloud.color_mode);
+        load_opt.build_esdf           = cfg.point_cloud.build_esdf;
+        load_opt.esdf_resolution      = cfg.point_cloud.esdf_resolution;
+        load_opt.esdf_map_origin[0]   = cfg.point_cloud.esdf_map_origin[0];
+        load_opt.esdf_map_origin[1]   = cfg.point_cloud.esdf_map_origin[1];
+        load_opt.esdf_map_origin[2]   = cfg.point_cloud.esdf_map_origin[2];
+        load_opt.esdf_map_size[0]     = cfg.point_cloud.esdf_map_size[0];
+        load_opt.esdf_map_size[1]     = cfg.point_cloud.esdf_map_size[1];
+        load_opt.esdf_map_size[2]     = cfg.point_cloud.esdf_map_size[2];
+        load_opt.esdf_use_fixed_map   = cfg.point_cloud.esdf_use_fixed_map;
+        load_opt.esdf_max_visual_dist = cfg.point_cloud.esdf_max_visual_dist;
+        load_opt.esdf_visual_stride   = cfg.point_cloud.esdf_visual_stride;
+        load_opt.esdf_visual_mode     = kinematic_viewer::EsdfVisualModeFromString(cfg.point_cloud.esdf_visual_mode);
+        load_opt.esdf_color_mode      = kinematic_viewer::EsdfColorModeFromString(cfg.point_cloud.esdf_color_mode);
+        load_opt.esdf_z_slice_enable  = cfg.point_cloud.esdf_z_slice_enable;
+        load_opt.esdf_z_slice_m       = cfg.point_cloud.esdf_z_slice_m;
+        load_opt.esdf_use_raycast     = cfg.point_cloud.esdf_use_raycast;
+        load_opt.esdf_ray_origin[0]   = cfg.point_cloud.esdf_ray_origin[0];
+        load_opt.esdf_ray_origin[1]   = cfg.point_cloud.esdf_ray_origin[1];
+        load_opt.esdf_ray_origin[2]   = cfg.point_cloud.esdf_ray_origin[2];
+        load_opt.esdf_ray_origin_auto = cfg.point_cloud.esdf_ray_origin_auto;
+        load_opt.esdf_min_ray_length  = cfg.point_cloud.esdf_min_ray_length;
+        load_opt.esdf_max_ray_length  = cfg.point_cloud.esdf_max_ray_length;
+        if (cfg.point_cloud.build_esdf && cfg.point_cloud.point_size_px >= 2.0f) {
+            point_cloud_state.point_size_px = cfg.point_cloud.point_size_px;
+        }
+        std::string status;
+        if (point_cloud_layer.LoadFromFile(pcd_path, load_opt, &status)) {
+            point_cloud_state.loaded          = true;
+            point_cloud_state.rendered_points = point_cloud_layer.gpuPointCount();
+            std::snprintf(point_cloud_state.file_path, sizeof(point_cloud_state.file_path), "%s", pcd_path.c_str());
+        }
+        std::snprintf(point_cloud_state.last_status, sizeof(point_cloud_state.last_status), "%s", status.c_str());
+    }
+
+    // ---------------------------------------------------------------------------
+    // Panel plugin registry — loads panel .so files from lib/ by id or path.
+    // ---------------------------------------------------------------------------
+    kinematic_viewer::RkvPanelRegistry panel_registry;
+    {
+        // Determine lib search directory: <exe>/../lib
+        std::string exe_dir;
+        {
+            char buf[4096] = {};
+            ssize_t len    = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+            if (len > 0) {
+                buf[len] = '\0';
+                exe_dir  = std::filesystem::path(buf).parent_path().string();
+            }
+        }
+        const std::vector<std::string> panel_search_dirs = {
+            exe_dir + "/../lib",
+            exe_dir + "/lib",
+            exe_dir,
+        };
+
+        std::vector<std::string> specs = cfg.ui.sidebar_panels;
+        if (specs.empty()) {
+            specs = {"scene", "ik", "playback", "safety", "joint", "tf", "obstacle", "planner", "teach", "point_cloud"};
+        }
+        panel_registry.LoadFromConfig(specs, panel_search_dirs);
+    }
+    {
+        const int preferred = panel_registry.IndexOf("joint");
+        ui_state.sidebar_page = preferred >= 0 ? preferred : 0;
+    }
 
     IkState ik_state;
     DebugPlaybackState playback_state;
@@ -458,7 +604,16 @@ int main(int argc, char** argv) {
         ImGuizmo::BeginFrame();
 
         const bool sidebar_hotkeys_enabled = !ImGui::GetIO().WantTextInput && !ImGui::GetIO().WantCaptureKeyboard;
-        ui_state.sidebar_page              = input_handler.HandleSidebarHotkeys(ui_state.sidebar_page, sidebar_hotkeys_enabled);
+        ui_state.sidebar_page =
+            input_handler.HandleSidebarHotkeys(ui_state.sidebar_page, panel_registry.Count(), sidebar_hotkeys_enabled);
+        if (panel_registry.Count() == 0) {
+            ui_state.sidebar_page = 0;
+        } else {
+            ui_state.sidebar_page = std::clamp(ui_state.sidebar_page, 0, panel_registry.Count() - 1);
+        }
+        const std::string current_panel_key =
+            panel_registry.Count() == 0 ? std::string("scene") : panel_registry.Id(ui_state.sidebar_page);
+        ui_state.scene_panel_active = (current_panel_key == "scene");
 
         KinematicInputHandler::UpdateContext input_ctx;
         input_ctx.mouse_x             = x;
@@ -472,7 +627,7 @@ int main(int argc, char** argv) {
         input_ctx.obs_gizmo_using     = obstacle_gizmo_was_using || base_gizmo_was_using;
         input_ctx.obs_gizmo_over      = obstacle_gizmo_was_over;
         input_ctx.ik_dragging_marker  = ik_state.dragging_marker;
-        input_ctx.sidebar_page        = ui_state.sidebar_page;
+        input_ctx.sidebar_page        = (current_panel_key == "scene") ? 0 : ((current_panel_key == "obstacle") ? 6 : -1);
         input_ctx.scroll_delta        = GetScrollDelta();
         input_ctx.left_mouse_down     = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
         input_ctx.middle_mouse_down   = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
@@ -503,6 +658,9 @@ int main(int argc, char** argv) {
         render_ctx.viewport_h        = viewport_h;
         render_ctx.mesh_shader       = mesh_shader;
         render_ctx.line_shader       = line_shader;
+        render_ctx.point_shader      = point_shader;
+        render_ctx.point_cloud       = &point_cloud_state;
+        render_ctx.point_cloud_layer = &point_cloud_layer;
         render_ctx.scene             = &scene;
         render_ctx.ui_state          = &ui_state;
         render_ctx.ik_state          = &ik_state;
@@ -538,7 +696,7 @@ int main(int argc, char** argv) {
         ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
         ImGuizmo::SetRect(0.0f, 0.0f, static_cast<float>(viewport_w), static_cast<float>(viewport_h));
 
-        const bool obstacle_page_active = (ui_state.sidebar_page == 0 || ui_state.sidebar_page == 6);
+        const bool obstacle_page_active = (current_panel_key == "scene" || current_panel_key == "obstacle");
         const bool obstacle_edit_active = obstacle_page_active && ui_state.user_obstacles.enable_pose_gizmo &&
                                           ui_state.user_obstacles.selected_index >= 0 &&
                                           ui_state.user_obstacles.selected_index < static_cast<int>(ui_state.user_obstacles.items.size());
@@ -573,7 +731,7 @@ int main(int argc, char** argv) {
         }
 
         const bool base_edit_active =
-            ui_state.mobile_base_drag_available && ui_state.mobile_base_drag_enabled && ui_state.sidebar_page == 0;
+            ui_state.mobile_base_drag_available && ui_state.mobile_base_drag_enabled && current_panel_key == "scene";
         if (base_edit_active && !obstacle_edit_active && !ik_state.gizmo_was_using) {
             float base_x_m = 0.0f;
             float base_y_m = 0.0f;
@@ -617,7 +775,7 @@ int main(int argc, char** argv) {
         }
 
         ImGuizmo::SetGizmoSizeClipSpace(ik_state.gizmo_size_clip_space);
-        const bool ik_page_active = (ui_state.sidebar_page == 1);
+        const bool ik_page_active = (current_panel_key == "ik");
         if (ik_page_active && !obstacle_edit_active && !base_gizmo_was_using && ik_state.selected_chain >= 0 &&
             ik_state.selected_chain < static_cast<int>(ik_state.chains.size())) {
             if (!ik_state.marker_initialized) {
@@ -917,24 +1075,16 @@ int main(int argc, char** argv) {
         }
         if (ImGui::CollapsingHeader("操作提示")) {
             ImGui::TextDisabled("视角：左键旋转，中键/Shift+左键平移，右键缩放，滚轮缩放");
-            ImGui::TextDisabled("快捷键 1-8 切换子页；场景页可开启 3D 点选 Link");
+            ImGui::TextDisabled("快捷键 1-9 切换子页；场景页可开启 3D 点选 Link");
         }
         ImGui::Separator();
-        struct SidebarTab {
-            const char* label;
-            int index;
-        };
-        const SidebarTab sidebar_tabs[] = {
-            {"场景", 0},  {"IK", 1},    {"回放", 2}, {"安全", 3}, {"关节", 4},
-            {"TF", 5},    {"障碍", 6},  {"规划", 7}, {"示教", 8},
-        };
         float avail_w = ImGui::GetContentRegionAvail().x;
         float used_w  = 0.0f;
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(5.0f, 3.0f));
-        for (size_t i = 0; i < sizeof(sidebar_tabs) / sizeof(sidebar_tabs[0]); ++i) {
+        for (int i = 0; i < panel_registry.Count(); ++i) {
             if (i > 0) {
                 const float spacing = ImGui::GetStyle().ItemSpacing.x;
-                const float btn_w   = ImGui::CalcTextSize(sidebar_tabs[i].label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                const float btn_w   = ImGui::CalcTextSize(panel_registry.Label(i).c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
                 if (used_w + spacing + btn_w <= avail_w) {
                     ImGui::SameLine();
                     used_w += spacing;
@@ -942,14 +1092,14 @@ int main(int argc, char** argv) {
                     used_w = 0.0f;
                 }
             }
-            const bool selected = (ui_state.sidebar_page == sidebar_tabs[i].index);
+            const bool selected = (ui_state.sidebar_page == i);
             if (selected) {
                 ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(90, 155, 235, 255));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(100, 168, 252, 255));
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(70, 132, 208, 255));
             }
-            if (ImGui::Button(sidebar_tabs[i].label)) {
-                ui_state.sidebar_page = sidebar_tabs[i].index;
+            if (ImGui::Button(panel_registry.Label(i).c_str())) {
+                ui_state.sidebar_page = i;
             }
             used_w += ImGui::GetItemRectSize().x;
             if (selected) {
@@ -963,46 +1113,40 @@ int main(int argc, char** argv) {
         kinematic_viewer::RenderAngleUnitSelector(&ui_state.angle_unit_deg);
         ImGui::Separator();
 
-        if (kinematic_viewer::SidebarPageShowsLinkInspector(ui_state.sidebar_page)) {
+        // link inspector is shared between scene and tf panels.
+        if (current_panel_key == "scene" || current_panel_key == "tf") {
             RenderLinkInspectorPanel(&ui_state, &scene, &camera, &collision_state, &collision_result, &playback_state, &collision_monitor,
                                      &link_kinematics_analyzer);
         }
 
-        if (ui_state.sidebar_page == 0) {
-            RenderScenePanel(&ui_state, &scene);
-            RenderRobotTreePanel(&ui_state, &scene);
-        }
-
-        auto joints = scene.getJointInfos();
+        auto joints   = scene.getJointInfos();
+        auto tf_infos = scene.getLinkTfInfos();
         kinematic_viewer::TickTrajectorySequence(&playback_state, &playback_sm, was_playback_playing, joints, &trajectory_player, &scene);
-        if (ui_state.sidebar_page == 4) {
-            RenderJointPanel(&ui_state, &scene, joints);
-        }
 
-        if (ui_state.sidebar_page == 1) {
-            RenderIkPanel(&ui_state, &ik_state, &ik_controller, &scene);
-        }
+        // Build the context bag and dispatch to the active panel plugin.
+        RkvPanelCtx panel_ctx{};
+        panel_ctx.viewer_state            = &ui_state;
+        panel_ctx.ik_state                = &ik_state;
+        panel_ctx.ik_controller           = &ik_controller;
+        panel_ctx.scene                   = &scene;
+        panel_ctx.camera                  = &camera;
+        panel_ctx.collision_state         = &collision_state;
+        panel_ctx.collision_result        = &collision_result;
+        panel_ctx.collision_monitor       = &collision_monitor;
+        panel_ctx.playback_state          = &playback_state;
+        panel_ctx.playback_player         = &trajectory_player;
+        panel_ctx.playback_sm             = &playback_sm;
+        panel_ctx.teach_state             = &teach_state;
+        panel_ctx.point_cloud_state       = &point_cloud_state;
+        panel_ctx.point_cloud_layer       = &point_cloud_layer;
+        panel_ctx.path_planner_ui         = &path_planner_ui;
+        panel_ctx.link_kinematics_analyzer = &link_kinematics_analyzer;
+        panel_ctx.joints                  = &joints;
+        panel_ctx.tf_infos                = &tf_infos;
+        panel_ctx.ik_solver               = &ik_state.solver;
+        panel_ctx.ik_chains               = &ik_state.chains;
 
-        if (ui_state.sidebar_page == 2) {
-            RenderPlaybackPanel(&playback_state, &trajectory_player, &playback_sm, &scene, joints);
-        }
-
-        if (ui_state.sidebar_page == 3) {
-            RenderSafetyPanel(&collision_state, collision_result);
-        }
-
-        if (ui_state.sidebar_page == 5) {
-            RenderTfPanel(&ui_state, scene.getLinkTfInfos());
-        }
-        if (ui_state.sidebar_page == 6) {
-            RenderObstaclePanel(&ui_state);
-        }
-        if (ui_state.sidebar_page == 7) {
-            RenderPathPlannerPanel(&ui_state, &path_planner_ui, &playback_state, &scene, &ik_state.solver, ik_state.chains);
-        }
-        if (ui_state.sidebar_page == 8) {
-            RenderTeachPanel(&teach_state, &playback_state, &scene, &ik_state.solver, ik_state.chains, joints);
-        }
+        panel_registry.Render(ui_state.sidebar_page, &panel_ctx);
 
         kinematic_viewer::EndSidebarScrollRegion();
 

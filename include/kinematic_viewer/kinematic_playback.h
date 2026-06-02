@@ -11,7 +11,7 @@ namespace kinematic_viewer {
 
     class TrajectoryInterpolator {
        public:
-        virtual ~TrajectoryInterpolator()                                             = default;
+        virtual ~TrajectoryInterpolator()                                   = default;
         virtual void SampleAndApply(const DebugPlaybackState& playbackState, float sampleTimeSec, int* currentSegmentIndex,
                                     teleop_viewer::RobotScene* scene) const = 0;
     };
@@ -55,12 +55,11 @@ namespace kinematic_viewer {
     bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
                                  const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
                                  teleop_viewer::RobotScene* scene);
-    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState,
-                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                      teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm);
-    void StartTrajectorySequence(DebugPlaybackState* playbackState,
-                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                 teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm);
+    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                      TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene,
+                                      PlaybackStateMachine* playback_sm);
+    void StartTrajectorySequence(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
+                                 TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm);
     void TickTrajectorySequence(DebugPlaybackState* playbackState, PlaybackStateMachine* playback_sm, bool was_playing_last_frame,
                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
                                 teleop_viewer::RobotScene* scene);

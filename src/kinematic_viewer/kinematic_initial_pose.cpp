@@ -8,9 +8,8 @@
 namespace kinematic_viewer {
     namespace kinematic_initial_pose_internal {
 
-        void ApplyJointGroup(const std::vector<std::string>& jointNames, const std::vector<float>& values,
-                             teleop_viewer::RobotScene* scene, InitialPoseApplyResult* result,
-                             std::vector<std::string>* missingJointNames) {
+        void ApplyJointGroup(const std::vector<std::string>& jointNames, const std::vector<float>& values, teleop_viewer::RobotScene* scene,
+                             InitialPoseApplyResult* result, std::vector<std::string>* missingJointNames) {
             if (scene == nullptr || result == nullptr || missingJointNames == nullptr) {
                 return;
             }
@@ -28,8 +27,7 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_initial_pose_internal
 
-    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config,
-                                                      teleop_viewer::RobotScene* scene) {
+    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, teleop_viewer::RobotScene* scene) {
         InitialPoseApplyResult result;
         if (scene == nullptr) {
             result.detail = "scene is null";
@@ -45,18 +43,17 @@ namespace kinematic_viewer {
 
         if (config.apply_chassis) {
             scene->setVirtualBasePose2D(config.chassis_x, config.chassis_y, config.chassis_yaw);
-            result.chassis_applied  = true;
-            result.chassis_x_m      = config.chassis_x;
-            result.chassis_y_m      = config.chassis_y;
-            result.chassis_yaw_rad  = config.chassis_yaw;
+            result.chassis_applied = true;
+            result.chassis_x_m     = config.chassis_x;
+            result.chassis_y_m     = config.chassis_y;
+            result.chassis_yaw_rad = config.chassis_yaw;
         }
         scene->updateTransforms();
 
         std::stringstream ss;
         ss << "已应用关节 " << result.applied_joint_count << "/" << result.requested_joint_count;
         if (result.chassis_applied) {
-            ss << "，底盘(x=" << config.chassis_x << " m, y=" << config.chassis_y << " m, yaw=" << config.chassis_yaw
-               << " rad)";
+            ss << "，底盘(x=" << config.chassis_x << " m, y=" << config.chassis_y << " m, yaw=" << config.chassis_yaw << " rad)";
         }
         if (!missingJointNames.empty()) {
             std::sort(missingJointNames.begin(), missingJointNames.end());

@@ -47,7 +47,7 @@ namespace kinematic_viewer {
             }
             teach->program_files[static_cast<size_t>(index)].status = "加载成功";
             teach->program_files[static_cast<size_t>(index)].loaded = true;
-            teach->selected_program_index                             = index;
+            teach->selected_program_index                           = index;
             std::snprintf(teach->program_file_path, sizeof(teach->program_file_path), "%s", path.c_str());
             teach->io_status = "已加载: " + teach->program_name;
             return true;
@@ -133,7 +133,7 @@ namespace kinematic_viewer {
 
             if (!teach->program_files.empty() && ImGui::BeginListBox("##teach_program_list", ImVec2(-1, 100))) {
                 for (int i = 0; i < static_cast<int>(teach->program_files.size()); ++i) {
-                    auto& entry = teach->program_files[static_cast<size_t>(i)];
+                    auto& entry       = teach->program_files[static_cast<size_t>(i)];
                     std::string label = std::filesystem::path(entry.path).filename().string();
                     if (!entry.status.empty() && entry.status != "未加载") {
                         label += " (" + entry.status + ")";
@@ -202,8 +202,9 @@ namespace kinematic_viewer {
 
         if (ImGui::CollapsingHeader("示教点", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (!chains.empty()) {
-                const char* preview = chains[static_cast<size_t>(std::clamp(teach->record_chain_index, 0, static_cast<int>(chains.size()) - 1))]
-                                          .config.label.c_str();
+                const char* preview =
+                    chains[static_cast<size_t>(std::clamp(teach->record_chain_index, 0, static_cast<int>(chains.size()) - 1))]
+                        .config.label.c_str();
                 if (ImGui::BeginCombo("记录末端链", preview)) {
                     for (int i = 0; i < static_cast<int>(chains.size()); ++i) {
                         const bool selected = (teach->record_chain_index == i);
@@ -234,8 +235,8 @@ namespace kinematic_viewer {
                 teach->selected_point_index = -1;
             }
 
-            const bool has_selection = teach->selected_point_index >= 0 &&
-                                       teach->selected_point_index < static_cast<int>(teach->points.size());
+            const bool has_selection =
+                teach->selected_point_index >= 0 && teach->selected_point_index < static_cast<int>(teach->points.size());
             if (has_selection) {
                 if (ImGui::Button("运动到该点")) {
                     ApplyTeachPointToScene(teach->points[static_cast<size_t>(teach->selected_point_index)], scene);
@@ -252,7 +253,7 @@ namespace kinematic_viewer {
             }
 
             if (has_selection) {
-                auto& point = teach->points[static_cast<size_t>(teach->selected_point_index)];
+                auto& point        = teach->points[static_cast<size_t>(teach->selected_point_index)];
                 char name_buf[128] = {};
                 std::snprintf(name_buf, sizeof(name_buf), "%s", point.name.c_str());
                 if (ImGui::InputText("点名", name_buf, sizeof(name_buf))) {
@@ -262,9 +263,8 @@ namespace kinematic_viewer {
 
             if (teach->points.empty()) {
                 ImGui::TextDisabled("暂无示教点。");
-            } else if (ImGui::BeginTable("teach_point_table", 4,
-                                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
-                                          ImVec2(0.0f, 200.0f))) {
+            } else if (ImGui::BeginTable("teach_point_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                                         ImVec2(0.0f, 200.0f))) {
                 ImGui::TableSetupColumn("#");
                 ImGui::TableSetupColumn("名称");
                 ImGui::TableSetupColumn("关节");
@@ -317,7 +317,7 @@ namespace kinematic_viewer {
                 if (!cart.success) {
                     teach->io_status = status;
                 } else if (!chains.empty()) {
-                    const int chain_index = std::clamp(teach->record_chain_index, 0, static_cast<int>(chains.size()) - 1);
+                    const int chain_index           = std::clamp(teach->record_chain_index, 0, static_cast<int>(chains.size()) - 1);
                     JointSpaceTrajectory joint_traj = solveIkForCartesianPathFullBody(cart, scene, solver, chain_index);
                     if (!joint_traj.success) {
                         joint_traj = solveIkForCartesianPath(cart, scene, solver, chain_index);

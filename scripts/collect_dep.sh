@@ -146,6 +146,10 @@ ensure_dir_exists "$TARGET_LIB_DIR"
 ensure_dir_exists "$TARGET_CFG_DIR"
 
 cp -L "$SRC_BIN_PATH" "$TARGET_BIN_DIR/"
+SRC_PLUGIN_PATH="$PROJECT_DIR/lib/librkv_point_cloud_pcl.so"
+if [ -f "$SRC_PLUGIN_PATH" ]; then
+    cp -L "$SRC_PLUGIN_PATH" "$TARGET_LIB_DIR/"
+fi
 cp -R "$SRC_CFG_PATH"/. "$TARGET_CFG_DIR/"
 
 if [ -d "$SRC_DOC_PATH" ]; then
@@ -160,6 +164,9 @@ echo "✅ 二进制与配置拷贝完成"
 echo "========== 递归收集动态库依赖 =========="
 declare -A SEEN_REAL_LIBS=()
 declare -a LIB_QUEUE=("$TARGET_BIN_DIR/robot_kinematic_viewer")
+if [ -f "$TARGET_LIB_DIR/librkv_point_cloud_pcl.so" ]; then
+    LIB_QUEUE+=("$TARGET_LIB_DIR/librkv_point_cloud_pcl.so")
+fi
 COPIED_COUNT=0
 SKIPPED_CORE_COUNT=0
 MISSING_COUNT=0

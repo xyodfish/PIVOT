@@ -101,12 +101,11 @@ namespace kinematic_viewer {
         prev_mouse_x_ = ctx.mouse_x;
         prev_mouse_y_ = ctx.mouse_y;
 
-        bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
+        bool mouse_in_viewport    = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
         const bool any_popup_open = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
         // ImGui has priority: if UI is consuming mouse (or any modal/popup is up), don't move camera.
-        bool block_camera =
-            ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.obs_gizmo_using || ctx.imgui_wants_mouse ||
-            any_popup_open;
+        bool block_camera = ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.obs_gizmo_using ||
+                            ctx.imgui_wants_mouse || any_popup_open;
 
         if (!mouse_in_viewport || block_camera) {
             return result;
@@ -135,8 +134,7 @@ namespace kinematic_viewer {
         ObstaclePickResult result;
         bool mouse_in_viewport     = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
         bool obstacle_pick_enabled = (ctx.sidebar_page == 0 || ctx.sidebar_page == 6);
-        bool can_pick = obstacle_pick_enabled && mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using &&
-                        !ctx.imgui_wants_mouse;
+        bool can_pick = obstacle_pick_enabled && mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
         if (!can_pick) {
             obstacle_pick_left_prev_ = ctx.left_mouse_down;
             return result;
@@ -176,15 +174,14 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view,
-                                                                                const glm::mat4& proj,
-                                                                                teleop_viewer::RobotScene* scene) {
+                                                                                const glm::mat4& proj, teleop_viewer::RobotScene* scene) {
         LinkPickResult result;
         if (scene == nullptr) {
             return result;
         }
 
         bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
-        bool can_pick = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
+        bool can_pick          = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
         if (!can_pick) {
             link_pick_left_prev_     = ctx.left_mouse_down;
             link_pick_drag_tracking_ = false;
@@ -228,16 +225,15 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view,
-                                                                                const glm::mat4& proj,
-                                                                                teleop_viewer::RobotScene* scene,
-                                                                                double now_sec) {
+                                                                                 const glm::mat4& proj, teleop_viewer::RobotScene* scene,
+                                                                                 double now_sec) {
         LinkPickResult result;
         if (scene == nullptr) {
             return result;
         }
 
         bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
-        bool can_hover = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
+        bool can_hover         = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
         if (!can_hover) {
             link_hover_last_sec_ = -1.0;
             return result;
@@ -263,24 +259,32 @@ namespace kinematic_viewer {
         return result;
     }
 
-    int KinematicInputHandler::HandleSidebarHotkeys(int current_page, bool enable_hotkeys) {
+    int KinematicInputHandler::HandleSidebarHotkeys(int current_page, int page_count, bool enable_hotkeys) {
         if (!enable_hotkeys) {
             return current_page;
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_1))
+        const int clamped_count = std::clamp(page_count, 0, 9);
+        if (clamped_count <= 0) {
+            return current_page;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_1) && clamped_count >= 1)
             return 0;
-        if (ImGui::IsKeyPressed(ImGuiKey_2))
+        if (ImGui::IsKeyPressed(ImGuiKey_2) && clamped_count >= 2)
             return 1;
-        if (ImGui::IsKeyPressed(ImGuiKey_3))
+        if (ImGui::IsKeyPressed(ImGuiKey_3) && clamped_count >= 3)
             return 2;
-        if (ImGui::IsKeyPressed(ImGuiKey_4))
+        if (ImGui::IsKeyPressed(ImGuiKey_4) && clamped_count >= 4)
             return 3;
-        if (ImGui::IsKeyPressed(ImGuiKey_5))
+        if (ImGui::IsKeyPressed(ImGuiKey_5) && clamped_count >= 5)
             return 4;
-        if (ImGui::IsKeyPressed(ImGuiKey_6))
+        if (ImGui::IsKeyPressed(ImGuiKey_6) && clamped_count >= 6)
             return 5;
-        if (ImGui::IsKeyPressed(ImGuiKey_7))
+        if (ImGui::IsKeyPressed(ImGuiKey_7) && clamped_count >= 7)
             return 6;
+        if (ImGui::IsKeyPressed(ImGuiKey_8) && clamped_count >= 8)
+            return 7;
+        if (ImGui::IsKeyPressed(ImGuiKey_9) && clamped_count >= 9)
+            return 8;
         return current_page;
     }
 

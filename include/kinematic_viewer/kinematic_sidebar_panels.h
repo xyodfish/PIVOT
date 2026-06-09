@@ -72,6 +72,7 @@ namespace kinematic_viewer {
         float ptp_max_jerk = 10.0f;  // rad/s^3 or m/s^3
         float ptp_delta_t  = 0.02f;  // sampling time step
         int ptp_profile    = 1;      // 0=TVP, 1=DSVP
+        int ptp_sync_mode  = 0;      // 0=hold (先到先停), 1=time_scaling (时间缩放)
         // Goal offsets from current position (per joint, filled at runtime)
         std::vector<float> ptp_goal_offsets;
 

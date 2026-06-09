@@ -104,6 +104,26 @@ class DoubleSPlanner : public VelocityPlannerInterface<double> {
     void setMaxJerk(double jerk);
 
     /**
+     * @brief Update velocity limits without recomputing the profile (for multi-DOF sync)
+     */
+    void setLimitsOnly(double vel, double acc, double jerk);
+
+    /**
+     * @brief Scale profile so this DOF finishes at max_time (multi-DOF time synchronization)
+     */
+    void syncToGivenTime(double max_time, double alpha, double beta);
+
+    /**
+     * @brief Override total trajectory time (e.g. stationary DOFs in multi-DOF sync)
+     */
+    void setTotalTime(double total_time);
+
+    /**
+     * @brief Rebuild jerk segments from current phase times and limits
+     */
+    void rebuildTrajectory();
+
+    /**
      * @brief Get boundary conditions
      * @return Current boundary conditions
      */
@@ -146,8 +166,9 @@ class DoubleSPlanner : public VelocityPlannerInterface<double> {
 
     /**
      * @brief Splice trajectory segments together
+     * @param force If true, rebuild even when segments already exist
      */
-    void splicingTrajectorySegments();
+    void splicingTrajectorySegments(bool force = false);
 
     BCs<double> BC_;                        ///< Boundary conditions
     bool needs_plan_{true};                 ///< Flag indicating if planning is needed

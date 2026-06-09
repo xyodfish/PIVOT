@@ -75,6 +75,8 @@ namespace kinematic_viewer {
         float max_jerk      = 10.0f;           // Max joint jerk (rad/s^3 or m/s^3), used by DSVP
         float delta_t       = 0.02f;           // Time step for sampling
         std::string profile = "DSVP";          // "TVP" or "DSVP"
+        // "hold": fast joints stop at goal and wait; "time_scaling": all joints arrive together via DSVP sync
+        std::string sync_mode = "hold";
     };
 
     // Unified path planner interface
@@ -122,8 +124,8 @@ namespace kinematic_viewer {
                                                          teleop_viewer::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb = nullptr);
 
-    // Joint-space point-to-point velocity planning using vp::MultiVelocityPlanner
-    // Plans a time-synchronized trajectory for all joints from start to goal positions
+    // Joint-space point-to-point velocity planning for all joints from start to goal positions.
+    // sync_mode "hold" plans each DOF independently then resamples; "time_scaling" uses vp::DoubleSMultiPlanner.
     JointSpaceTrajectory planJointSpacePTP(const JointSpacePTPParams& params);
 
     // Export joint-space trajectory to CSV format compatible with playback

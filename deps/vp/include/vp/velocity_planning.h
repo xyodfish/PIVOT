@@ -18,6 +18,7 @@
 // Planners
 #include "trapezoidal_planner.h"
 #include "double_s_planner.h"
+#include "double_s_multi_planner.h"
 #include "multi_velocity_planner.h"
 
 // Geometry trajectory

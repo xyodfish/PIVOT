@@ -8,6 +8,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
@@ -66,6 +67,29 @@ namespace kinematic_viewer {
                 return UserObstacleItem::Kind::Cylinder;
             }
             return UserObstacleItem::Kind::Box;
+        }
+
+        bool ReadVec3(const YAML::Node& node, glm::vec3* out) {
+            if (out == nullptr || !node || !node.IsSequence() || node.size() < 3) {
+                return false;
+            }
+            *out = glm::vec3(node[0].as<float>(), node[1].as<float>(), node[2].as<float>());
+            return true;
+        }
+
+        bool ReadTransformQuat(const YAML::Node& node, glm::vec3* position, glm::vec3* rpy_deg) {
+            if (position == nullptr || rpy_deg == nullptr || !node || !node.IsSequence() || node.size() < 7) {
+                return false;
+            }
+            *position = glm::vec3(node[0].as<float>(), node[1].as<float>(), node[2].as<float>());
+            const glm::quat q(node[6].as<float>(), node[3].as<float>(), node[4].as<float>(), node[5].as<float>());
+            *rpy_deg = glm::degrees(glm::eulerAngles(glm::normalize(q)));
+            return true;
+        }
+
+        std::array<float, 7> PoseXyzQuatFromObstacle(const UserObstacleItem& o) {
+            const glm::quat q = glm::normalize(glm::quat_cast(markerWorldMatrix(glm::vec3(0.0f), o.rpy_deg)));
+            return {o.position.x, o.position.y, o.position.z, q.x, q.y, q.z, q.w};
         }
 
         void pushMeshToGpu(const std::vector<VertexPN>& verts, const std::vector<unsigned int>& indices, GLuint* vao, GLuint* vbo,
@@ -684,14 +708,22 @@ namespace kinematic_viewer {
                 } else {
                     ofs << "obstacles:\n";
                     for (const auto& o : st->items) {
-                        ofs << "  - name: \"" << o.name << "\"\n";
-                        ofs << "    kind: " << ObstacleKindName(o.kind) << "\n";
-                        ofs << "    visible: " << (o.visible ? "true" : "false") << "\n";
-                        ofs << "    color: [" << o.color.x << ", " << o.color.y << ", " << o.color.z << "]\n";
-                        ofs << "    position: [" << o.position.x << ", " << o.position.y << ", " << o.position.z << "]\n";
-                        ofs << "    rpy_deg: [" << o.rpy_deg.x << ", " << o.rpy_deg.y << ", " << o.rpy_deg.z << "]\n";
-                        ofs << "    params: [" << o.params.x << ", " << o.params.y << ", " << o.params.z << "]\n";
+                    ofs << "  - name: \"" << o.name << "\"\n";
+                    ofs << "    kind: " << ObstacleKindName(o.kind) << "\n";
+                    ofs << "    visible: " << (o.visible ? "true" : "false") << "\n";
+                    ofs << "    color: [" << o.color.x << ", " << o.color.y << ", " << o.color.z << "]\n";
+                    const auto pose = PoseXyzQuatFromObstacle(o);
+                    ofs << "    transform: [" << pose[0] << ", " << pose[1] << ", " << pose[2] << ", " << pose[3] << ", " << pose[4]
+                        << ", " << pose[5] << ", " << pose[6] << "]\n";
+                    if (o.kind == UserObstacleItem::Kind::Sphere) {
+                        ofs << "    radius: " << o.params.x << "\n";
+                    } else if (o.kind == UserObstacleItem::Kind::Cylinder) {
+                        ofs << "    radius: " << o.params.x << "\n";
+                        ofs << "    height: " << o.params.y << "\n";
+                    } else {
+                        ofs << "    size: [" << o.params.x << ", " << o.params.y << ", " << o.params.z << "]\n";
                     }
+                }
                     if (ofs.good()) {
                         export_status = std::string("导出成功: ") + final_path + " (共 " + std::to_string(st->items.size()) + " 个)";
                         std::snprintf(export_path_full, sizeof(export_path_full), "%s", final_path.c_str());
@@ -798,21 +830,40 @@ namespace kinematic_viewer {
                                 item.name = "obs_" + std::to_string(i + 1);
                             if (n["kind"])
                                 item.kind = ObstacleKindFromName(n["kind"].as<std::string>());
+                            else if (n["type"])
+                                item.kind = ObstacleKindFromName(n["type"].as<std::string>());
                             if (n["visible"])
                                 item.visible = n["visible"].as<bool>();
-                            if (n["color"] && n["color"].IsSequence() && n["color"].size() >= 3) {
-                                item.color = glm::vec3(n["color"][0].as<float>(), n["color"][1].as<float>(), n["color"][2].as<float>());
+                            ReadVec3(n["color"], &item.color);
+                            if (!ReadTransformQuat(n["transform"], &item.position, &item.rpy_deg)) {
+                                ReadVec3(n["position"], &item.position);
+                                ReadVec3(n["rpy_deg"], &item.rpy_deg);
                             }
-                            if (n["position"] && n["position"].IsSequence() && n["position"].size() >= 3) {
-                                item.position =
-                                    glm::vec3(n["position"][0].as<float>(), n["position"][1].as<float>(), n["position"][2].as<float>());
-                            }
-                            if (n["rpy_deg"] && n["rpy_deg"].IsSequence() && n["rpy_deg"].size() >= 3) {
-                                item.rpy_deg =
-                                    glm::vec3(n["rpy_deg"][0].as<float>(), n["rpy_deg"][1].as<float>(), n["rpy_deg"][2].as<float>());
-                            }
-                            if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 3) {
-                                item.params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), n["params"][2].as<float>());
+                            if (item.kind == UserObstacleItem::Kind::Sphere) {
+                                if (n["radius"]) {
+                                    item.params = glm::vec3(n["radius"].as<float>(), 0.0f, 0.0f);
+                                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 1) {
+                                    item.params = glm::vec3(n["size"][0].as<float>(), 0.0f, 0.0f);
+                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 1) {
+                                    item.params = glm::vec3(n["params"][0].as<float>(), 0.0f, 0.0f);
+                                }
+                            } else if (item.kind == UserObstacleItem::Kind::Cylinder) {
+                                if (n["radius"]) {
+                                    item.params.x = n["radius"].as<float>();
+                                }
+                                if (n["height"]) {
+                                    item.params.y = n["height"].as<float>();
+                                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 2) {
+                                    item.params.y = n["size"][1].as<float>();
+                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 2) {
+                                    item.params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), 0.0f);
+                                }
+                            } else {
+                                if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 3) {
+                                    item.params = glm::vec3(n["size"][0].as<float>(), n["size"][1].as<float>(), n["size"][2].as<float>());
+                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 3) {
+                                    item.params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), n["params"][2].as<float>());
+                                }
                             }
                             loaded.push_back(item);
                         }

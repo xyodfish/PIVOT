@@ -184,9 +184,16 @@ void DoubleSPlanner::calWithGradReducingAcc(BCs<double>& BC, double gamma) {
     }
 }
 
-void DoubleSPlanner::splicingTrajectorySegments() {
-    if (!needs_plan_ || trajectory_->getSegmentsNum() == TRAJ_SEGMENT_NUM) {
+void DoubleSPlanner::splicingTrajectorySegments(bool force) {
+    if (!needs_plan_) {
         return;
+    }
+    if (!force && trajectory_ && trajectory_->getSegmentsNum() == TRAJ_SEGMENT_NUM) {
+        return;
+    }
+
+    if (!trajectory_) {
+        trajectory_ = std::make_shared<PiecewiseTrajectory>();
     }
 
     // Clear existing trajectory
@@ -331,6 +338,56 @@ void DoubleSPlanner::setMaxAcc(double acc) {
 void DoubleSPlanner::setMaxJerk(double jerk) {
     BC_.max_jerk = jerk;
     initParams();
+}
+
+void DoubleSPlanner::setLimitsOnly(double vel, double acc, double jerk) {
+    BC_.max_vel  = vel;
+    BC_.max_acc  = acc;
+    BC_.max_jerk = jerk;
+}
+
+void DoubleSPlanner::syncToGivenTime(double max_time, double alpha, double beta) {
+    if (!needs_plan_ || max_time < 1e-9) {
+        return;
+    }
+
+    const double h = dp;
+    if (h < 1e-9) {
+        return;
+    }
+
+    const double denom_vel = (1.0 - alpha) * max_time;
+    const double denom_acc = (1.0 - alpha) * alpha * (1.0 - beta) * std::pow(max_time, 2);
+    const double denom_jerk =
+        std::pow(alpha, 2) * beta * (1.0 - alpha) * (1.0 - beta) * std::pow(max_time, 3);
+
+    if (denom_vel < 1e-12 || denom_acc < 1e-12 || denom_jerk < 1e-12) {
+        return;
+    }
+
+    setLimitsOnly(h / denom_vel, h / denom_acc, h / denom_jerk);
+
+    t[T_A]  = alpha * max_time;
+    t[TJ1]  = beta * t[T_A];
+    t[T_D]  = t[T_A];
+    t[TJ2]  = t[TJ1];
+    t[T_V]  = max_time - t[T_A] - t[T_D];
+    tTotal  = max_time;
+    tAcc    = t[T_A] - 2.0 * t[TJ1];
+    tDec    = t[T_D] - 2.0 * t[TJ2];
+    aLimitA = BC_.max_jerk * t[TJ1];
+    aLimitD = -BC_.max_jerk * t[TJ2];
+    vLimit  = BC_.start_state.vel + (t[T_A] - t[TJ1]) * aLimitA;
+
+    rebuildTrajectory();
+}
+
+void DoubleSPlanner::setTotalTime(double total_time) {
+    tTotal = std::max(0.0, total_time);
+}
+
+void DoubleSPlanner::rebuildTrajectory() {
+    splicingTrajectorySegments(true);
 }
 
 }  // namespace vp

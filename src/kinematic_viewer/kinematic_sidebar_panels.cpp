@@ -1858,6 +1858,11 @@ namespace kinematic_viewer {
             ui->ptp_delta_t            = std::max(0.001f, std::min(ui->ptp_delta_t, 0.1f));
             const char* ptp_profiles[] = {"TVP (梯形)", "DSVP (双S)"};
             ImGui::Combo("速度曲线", &ui->ptp_profile, ptp_profiles, IM_ARRAYSIZE(ptp_profiles));
+            const char* ptp_sync_modes[] = {"先到先停 (hold)", "时间缩放 (time_scaling)"};
+            ImGui::Combo("同步方式", &ui->ptp_sync_mode, ptp_sync_modes, IM_ARRAYSIZE(ptp_sync_modes));
+            if (ui->ptp_sync_mode == 1) {
+                ImGui::TextDisabled("时间缩放固定使用 DSVP，快关节全程协调运动");
+            }
 
             // Per-joint goal offset inputs
             auto joints = scene->getJointInfos();
@@ -1925,7 +1930,8 @@ namespace kinematic_viewer {
                     ptp_params.max_acc  = ui->ptp_max_acc;
                     ptp_params.max_jerk = ui->ptp_max_jerk;
                     ptp_params.delta_t  = ui->ptp_delta_t;
-                    ptp_params.profile  = (ui->ptp_profile == 0) ? "TVP" : "DSVP";
+                    ptp_params.profile   = (ui->ptp_profile == 0) ? "TVP" : "DSVP";
+                    ptp_params.sync_mode = (ui->ptp_sync_mode == 0) ? "hold" : "time_scaling";
 
                     auto joint_traj = planJointSpacePTP(ptp_params);
                     if (!joint_traj.success) {

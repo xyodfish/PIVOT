@@ -566,6 +566,176 @@ namespace kinematic_viewer {
         return result;
     }
 
+    namespace {
+
+        vp::BCs<double> makeJointPTPBoundaryCondition(const JointSpacePTPParams& params, size_t dof_index) {
+            vp::BCs<double> bc;
+            bc.start_state.pos = static_cast<double>(params.start_positions[dof_index]);
+            bc.start_state.vel = 0.0;
+            bc.start_state.acc = 0.0;
+            bc.goal_state.pos  = static_cast<double>(params.goal_positions[dof_index]);
+            bc.goal_state.vel  = 0.0;
+            bc.goal_state.acc  = 0.0;
+            bc.max_vel         = static_cast<double>(params.max_vel);
+            bc.max_acc         = static_cast<double>(params.max_acc);
+            bc.max_jerk        = static_cast<double>(params.max_jerk);
+            bc.delta_t         = static_cast<double>(params.delta_t);
+            return bc;
+        }
+
+        bool allJointsStationary(const JointSpacePTPParams& params) {
+            for (size_t i = 0; i < params.joint_names.size(); ++i) {
+                if (std::fabs(static_cast<double>(params.goal_positions[i] - params.start_positions[i])) >= 1e-6) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        JointSpaceTrajectory makeStationaryTrajectory(const JointSpacePTPParams& params) {
+            JointSpaceTrajectory result;
+            result.joint_names = params.joint_names;
+            result.times.push_back(0.0f);
+            result.joint_positions.push_back(params.start_positions);
+            result.success     = true;
+            result.status      = "成功: 所有关节无运动";
+            return result;
+        }
+
+        JointSpaceTrajectory planJointSpacePTPHold(const JointSpacePTPParams& params) {
+            JointSpaceTrajectory result;
+
+            const size_t n_dofs = params.joint_names.size();
+            std::vector<std::vector<vp::KinematicState<double>>> per_dof_trajs;
+            per_dof_trajs.reserve(n_dofs);
+            double max_total_time = 0.0;
+
+            for (size_t i = 0; i < n_dofs; ++i) {
+                const double start_pos = static_cast<double>(params.start_positions[i]);
+                const double goal_pos  = static_cast<double>(params.goal_positions[i]);
+                const double dp        = std::fabs(goal_pos - start_pos);
+
+                if (dp < 1e-6) {
+                    std::vector<vp::KinematicState<double>> fallback;
+                    vp::KinematicState<double> s0, s1;
+                    s0.time = 0.0;
+                    s0.pos  = start_pos;
+                    s0.vel  = 0.0;
+                    s1.time = std::max(static_cast<double>(params.delta_t), 0.02);
+                    s1.pos  = goal_pos;
+                    s1.vel  = 0.0;
+                    fallback.push_back(s0);
+                    fallback.push_back(s1);
+                    per_dof_trajs.push_back(fallback);
+                    max_total_time = std::max(max_total_time, fallback.back().time);
+                    continue;
+                }
+
+                const vp::BCs<double> bc = makeJointPTPBoundaryCondition(params, i);
+                std::vector<vp::BCs<double>> bc_vec = {bc};
+                std::shared_ptr<vp::VelocityPlannerInterface<double>> planner;
+                if (params.profile == "TVP") {
+                    planner = std::make_shared<vp::TrapezoidalPlanner>(bc_vec, "TVP");
+                } else {
+                    planner = std::make_shared<vp::DoubleSPlanner>(bc_vec, "DSVP");
+                }
+
+                auto kstates = planner->planKStates(false);
+                if (kstates.empty() || kstates[0].empty()) {
+                    result.status = "错误: DOF " + std::to_string(i) + " 规划返回空轨迹";
+                    return result;
+                }
+                per_dof_trajs.push_back(kstates[0]);
+                max_total_time = std::max(max_total_time, kstates[0].back().time);
+            }
+
+            if (max_total_time < 1e-9) {
+                return makeStationaryTrajectory(params);
+            }
+
+            result.joint_names = params.joint_names;
+            const double dt    = static_cast<double>(params.delta_t);
+            const int n_steps  = static_cast<int>(std::ceil(max_total_time / dt)) + 1;
+
+            for (int step = 0; step < n_steps; ++step) {
+                const double t = std::min(static_cast<double>(step) * dt, max_total_time);
+                result.times.push_back(static_cast<float>(t));
+
+                std::vector<float> positions;
+                positions.reserve(n_dofs);
+                for (size_t i = 0; i < n_dofs; ++i) {
+                    const auto& traj = per_dof_trajs[i];
+                    size_t idx       = 0;
+                    while (idx + 1 < traj.size() && traj[idx + 1].time <= t) {
+                        ++idx;
+                    }
+                    if (idx + 1 >= traj.size()) {
+                        positions.push_back(static_cast<float>(traj.back().pos));
+                    } else {
+                        const double t0 = traj[idx].time;
+                        const double t1 = traj[idx + 1].time;
+                        const double p0 = traj[idx].pos;
+                        const double p1 = traj[idx + 1].pos;
+                        if (t1 - t0 < 1e-12) {
+                            positions.push_back(static_cast<float>(p0));
+                        } else {
+                            const double ratio = (t - t0) / (t1 - t0);
+                            positions.push_back(static_cast<float>(p0 + ratio * (p1 - p0)));
+                        }
+                    }
+                }
+                result.joint_positions.push_back(std::move(positions));
+            }
+
+            result.success = true;
+            result.status  = "成功[先到先停]: 生成 " + std::to_string(result.times.size()) + " 个轨迹点, 时长 " +
+                            std::to_string(result.times.back()) + "s";
+            return result;
+        }
+
+        JointSpaceTrajectory planJointSpacePTPTimeScaling(const JointSpacePTPParams& params) {
+            JointSpaceTrajectory result;
+
+            if (allJointsStationary(params)) {
+                return makeStationaryTrajectory(params);
+            }
+
+            std::vector<vp::BCs<double>> bcs;
+            bcs.reserve(params.joint_names.size());
+            for (size_t i = 0; i < params.joint_names.size(); ++i) {
+                bcs.push_back(makeJointPTPBoundaryCondition(params, i));
+            }
+
+            vp::DoubleSMultiPlanner multi_planner(bcs, "MDSVP");
+            const auto per_dof_trajs = multi_planner.planKStates(false);
+            if (per_dof_trajs.empty() || per_dof_trajs[0].empty()) {
+                result.status = "错误: 时间缩放同步规划返回空轨迹";
+                return result;
+            }
+
+            result.joint_names = params.joint_names;
+            const size_t n_points = per_dof_trajs[0].size();
+            result.times.reserve(n_points);
+            result.joint_positions.reserve(n_points);
+
+            for (size_t point = 0; point < n_points; ++point) {
+                result.times.push_back(static_cast<float>(per_dof_trajs[0][point].time));
+                std::vector<float> positions;
+                positions.reserve(per_dof_trajs.size());
+                for (const auto& dof_traj : per_dof_trajs) {
+                    positions.push_back(static_cast<float>(dof_traj[point].pos));
+                }
+                result.joint_positions.push_back(std::move(positions));
+            }
+
+            result.success = true;
+            result.status  = "成功[时间缩放]: 生成 " + std::to_string(result.times.size()) + " 个轨迹点, 时长 " +
+                            std::to_string(result.times.back()) + "s (DSVP)";
+            return result;
+        }
+
+    }  // namespace
+
     // ------------------------------------------------------------------
     // Joint-Space Point-to-Point Velocity Planning
     // ------------------------------------------------------------------
@@ -581,120 +751,11 @@ namespace kinematic_viewer {
             return result;
         }
 
-        const size_t n_dofs = params.joint_names.size();
-
         try {
-            // Plan each DOF independently, then synchronize by time
-            std::vector<std::vector<vp::KinematicState<double>>> per_dof_trajs;
-            per_dof_trajs.reserve(n_dofs);
-            double max_total_time = 0.0;
-
-            for (size_t i = 0; i < n_dofs; ++i) {
-                double start_pos = static_cast<double>(params.start_positions[i]);
-                double goal_pos  = static_cast<double>(params.goal_positions[i]);
-                double dp        = std::fabs(goal_pos - start_pos);
-
-                // For zero-motion DOFs, skip planner and create constant trajectory
-                if (dp < 1e-6) {
-                    std::vector<vp::KinematicState<double>> fallback;
-                    vp::KinematicState<double> s0, s1;
-                    s0.time = 0.0;
-                    s0.pos  = start_pos;
-                    s0.vel  = 0.0;
-                    s1.time = std::max(static_cast<double>(params.delta_t), 0.02);
-                    s1.pos  = goal_pos;
-                    s1.vel  = 0.0;
-                    fallback.push_back(s0);
-                    fallback.push_back(s1);
-                    per_dof_trajs.push_back(fallback);
-                    double dof_end_time = fallback.back().time;
-                    if (dof_end_time > max_total_time) {
-                        max_total_time = dof_end_time;
-                    }
-                    continue;
-                }
-
-                vp::BCs<double> bc;
-                bc.start_state.pos = start_pos;
-                bc.start_state.vel = 0.0;
-                bc.start_state.acc = 0.0;
-                bc.goal_state.pos  = goal_pos;
-                bc.goal_state.vel  = 0.0;
-                bc.goal_state.acc  = 0.0;
-                bc.max_vel         = static_cast<double>(params.max_vel);
-                bc.max_acc         = static_cast<double>(params.max_acc);
-                bc.max_jerk        = static_cast<double>(params.max_jerk);
-                bc.delta_t         = static_cast<double>(params.delta_t);
-
-                std::vector<vp::BCs<double>> bc_vec = {bc};
-                std::shared_ptr<vp::VelocityPlannerInterface<double>> planner;
-                if (params.profile == "TVP") {
-                    planner = std::make_shared<vp::TrapezoidalPlanner>(bc_vec, "TVP");
-                } else {
-                    planner = std::make_shared<vp::DoubleSPlanner>(bc_vec, "DSVP");
-                }
-
-                auto kstates = planner->planKStates(false);
-                if (kstates.empty() || kstates[0].empty()) {
-                    result.status = "错误: DOF " + std::to_string(i) + " 规划返回空轨迹";
-                    return result;
-                }
-                per_dof_trajs.push_back(kstates[0]);
-                double dof_end_time = kstates[0].back().time;
-                if (dof_end_time > max_total_time) {
-                    max_total_time = dof_end_time;
-                }
+            if (params.sync_mode == "time_scaling") {
+                return planJointSpacePTPTimeScaling(params);
             }
-
-            // If all DOFs have zero motion, return single point
-            if (max_total_time < 1e-9) {
-                result.joint_names = params.joint_names;
-                result.times.push_back(0.0f);
-                result.joint_positions.push_back(params.start_positions);
-                result.success = true;
-                result.status  = "成功: 所有关节无运动";
-                return result;
-            }
-
-            // Resample all DOFs at uniform time grid
-            result.joint_names = params.joint_names;
-            const double dt    = static_cast<double>(params.delta_t);
-            const int n_steps  = static_cast<int>(std::ceil(max_total_time / dt)) + 1;
-
-            for (int step = 0; step < n_steps; ++step) {
-                double t = std::min(static_cast<double>(step) * dt, max_total_time);
-                result.times.push_back(static_cast<float>(t));
-
-                std::vector<float> positions;
-                positions.reserve(n_dofs);
-                for (size_t i = 0; i < n_dofs; ++i) {
-                    const auto& traj = per_dof_trajs[i];
-                    // Find the state at time t by linear interpolation
-                    size_t idx = 0;
-                    while (idx + 1 < traj.size() && traj[idx + 1].time <= t) {
-                        ++idx;
-                    }
-                    if (idx + 1 >= traj.size()) {
-                        positions.push_back(static_cast<float>(traj.back().pos));
-                    } else {
-                        double t0 = traj[idx].time;
-                        double t1 = traj[idx + 1].time;
-                        double p0 = traj[idx].pos;
-                        double p1 = traj[idx + 1].pos;
-                        if (t1 - t0 < 1e-12) {
-                            positions.push_back(static_cast<float>(p0));
-                        } else {
-                            double ratio = (t - t0) / (t1 - t0);
-                            positions.push_back(static_cast<float>(p0 + ratio * (p1 - p0)));
-                        }
-                    }
-                }
-                result.joint_positions.push_back(std::move(positions));
-            }
-
-            result.success = true;
-            result.status =
-                "成功: 生成 " + std::to_string(result.times.size()) + " 个轨迹点, 时长 " + std::to_string(result.times.back()) + "s";
+            return planJointSpacePTPHold(params);
         } catch (const std::exception& ex) {
             result.status = std::string("关节空间规划失败: ") + ex.what();
         } catch (...) {

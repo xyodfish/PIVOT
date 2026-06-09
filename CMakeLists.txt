@@ -122,6 +122,7 @@ set_target_properties(wbc_chain_ik_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(velocity_planning
     deps/vp/src/trapezoidal/trapezoidal_planner.cpp
     deps/vp/src/double_s/double_s_planner.cpp
+    deps/vp/src/double_s/double_s_multi_planner.cpp
     deps/vp/src/multi_velocity_planner.cpp
     deps/vp/src/curve_interface/constant_jerk_trajectory.cpp
     deps/vp/src/curve_interface/piecewise_trajectory.cpp
@@ -295,6 +296,7 @@ if(RKV_PCL_FOUND)
         BUILD_RPATH "${ROOT_DEVEL_ARCH_PATH}/lib"
         INSTALL_RPATH "$ORIGIN/../lib")
 
+    target_compile_definitions(rkv_viewer_core PUBLIC RKV_HAS_PCL=1)
     target_compile_definitions(robot_kinematic_viewer PRIVATE RKV_HAS_PCL=1)
     add_dependencies(robot_kinematic_viewer rkv_point_cloud_pcl)
     message(STATUS "Point cloud: PCL plugin rkv_point_cloud_pcl (${RKV_PCL_LIBS})")

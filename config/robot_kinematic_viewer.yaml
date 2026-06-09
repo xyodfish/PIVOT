@@ -35,9 +35,9 @@ ros:
 
 # PCD 点云（map 坐标系）；文件路径相对仓库根目录
 point_cloud:
-  enable: false
+  enable: true
   visible: true
-  auto_load_on_start: false
+  auto_load_on_start: true
   file_path: "global_cloud.pcd"
   voxel_size: 0.05
   max_points: 500000
@@ -50,18 +50,18 @@ point_cloud:
   offset_x: 0.0
   offset_y: 0.0
   offset_yaw: 0.0
-  point_size_px: 2.0      # ESDF 栅格模式建议 5~8
-  color_mode: "height"  # flat | height | intensity
+  point_size_px: 2.0 # ESDF 栅格模式建议 5~8
+  color_mode: "height" # flat | height | intensity
   # 从 PCD 占据栅格 + 欧氏距离变换构建 ESDF（参考 aphropm load_ESDFMap(.pcd)）
-  build_esdf: false
+  build_esdf: true
   esdf_resolution: 0.05
   esdf_map_origin: [-30.0, -20.0, -0.1]
   esdf_map_size: [60.0, 40.0, 2.1]
   esdf_use_fixed_map: true
-  esdf_visual_mode: "occupied"   # occupied | surface | distance
-  esdf_color_mode: "height"      # flat | height | distance
+  esdf_visual_mode: "occupied" # occupied | surface | distance
+  esdf_color_mode: "height" # flat | height | distance
   esdf_max_visual_dist: 0.15
-  esdf_visual_stride: 2   # occupied 模式也生效，越大越快、越稀疏
+  esdf_visual_stride: 2 # occupied 模式也生效，越大越快、越稀疏
   esdf_z_slice_enable: false
   esdf_z_slice_m: 0.5
   esdf_use_raycast: true

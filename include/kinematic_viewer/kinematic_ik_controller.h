@@ -3,8 +3,8 @@
 #include "kinematic_viewer/kinematic_marker_target_state.h"
 #include "kinematic_viewer/kinematic_viewer_config.h"
 #include "kinematic_viewer/kinematic_viewer_state.h"
-#include "teleop_viewer/ik_solver.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/ik_solver.h"
+#include "rkv/scene.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -23,20 +23,20 @@ namespace kinematic_viewer {
         bool InitializeSolver(const std::string& urdf_path, const ViewerIkConfig& ik_cfg);
 
         // Marker target helpers
-        bool EnsureMarkerTargetInitialized(teleop_viewer::RobotScene* scene, int chain_index);
-        bool LoadActiveMarkerFromTarget(teleop_viewer::RobotScene* scene);
+        bool EnsureMarkerTargetInitialized(rkv::RobotScene* scene, int chain_index);
+        bool LoadActiveMarkerFromTarget(rkv::RobotScene* scene);
         void SaveActiveMarkerToTarget();
 
         // IK solve entry points
-        bool ApplyIkForActiveChain(teleop_viewer::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
+        bool ApplyIkForActiveChain(rkv::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
                                    bool prefer_position_only_target);
-        bool RefineActiveChainToMarker(teleop_viewer::RobotScene* scene);
+        bool RefineActiveChainToMarker(rkv::RobotScene* scene);
 
         // Utility
-        float ActiveChainPositionErrorMmToMarker(teleop_viewer::RobotScene* scene) const;
+        float ActiveChainPositionErrorMmToMarker(rkv::RobotScene* scene) const;
 
         // External target application
-        void ApplyExternalTarget(teleop_viewer::RobotScene* scene);
+        void ApplyExternalTarget(rkv::RobotScene* scene);
 
         // Accessors
         IkState* State() const { return ik_state_; }

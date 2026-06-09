@@ -1,4 +1,4 @@
-#include "teleop_viewer/ik_solver.h"
+#include "rkv/ik_solver.h"
 
 #include <urdf_parser/urdf_parser.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -15,7 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace teleop_viewer {
+namespace rkv {
     namespace {
 
         pinocchio::Model BuildFloatingBaseModelForWbc(const std::string& urdfPath, bool* hasFloatingBase) {
@@ -1112,4 +1112,4 @@ namespace teleop_viewer {
         return success;
     }
 
-}  // namespace teleop_viewer
+}  // namespace rkv

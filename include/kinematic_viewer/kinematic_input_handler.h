@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kinematic_viewer/kinematic_runtime_state.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -60,21 +60,29 @@ namespace kinematic_viewer {
 
         // Call once per frame with current GLFW window and context.
         // Returns camera input result (whether camera consumed the input).
-        CameraInputResult UpdateCamera(teleop_viewer::OrbitCamera* camera, const UpdateContext& ctx);
+        CameraInputResult UpdateCamera(rkv::OrbitCamera* camera, const UpdateContext& ctx);
 
         // Check for obstacle click-pick in the 3D viewport.
         ObstaclePickResult UpdateObstaclePick(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
                                               const UserObstacleState& obstacles);
 
         LinkPickResult UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
-                                      teleop_viewer::RobotScene* scene);
+                                      rkv::RobotScene* scene);
 
         // Raycast link under cursor (fast proxy pick, throttled). throttle_skip when not refreshed.
         LinkPickResult UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
-                                       teleop_viewer::RobotScene* scene, double now_sec);
+                                       rkv::RobotScene* scene, double now_sec);
 
         // Handle sidebar page hotkeys (1-9), bounded by visible tab count.
         int HandleSidebarHotkeys(int current_page, int page_count, bool enable_hotkeys);
+
+        struct ViewportHotkeyResult {
+            bool toggled_sidebar = false;
+            bool toggled_playback = false;
+        };
+
+        // Space: play/pause; H: toggle sidebar visibility.
+        ViewportHotkeyResult HandleViewportHotkeys(bool enable_hotkeys, bool has_playable_trajectory);
 
         // Reset internal mouse tracking (e.g., after window focus change).
         void ResetMouseTracking();

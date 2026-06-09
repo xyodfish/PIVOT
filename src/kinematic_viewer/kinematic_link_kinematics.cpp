@@ -37,7 +37,7 @@ namespace kinematic_viewer {
         }
     }
 
-    bool LinkKinematicsAnalyzer::compute(const teleop_viewer::RobotScene& scene, const std::string& link_name, LinkKinematicsMetrics* out) {
+    bool LinkKinematicsAnalyzer::compute(const rkv::RobotScene& scene, const std::string& link_name, LinkKinematicsMetrics* out) {
         if (out == nullptr) {
             return false;
         }

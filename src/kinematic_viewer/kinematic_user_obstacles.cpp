@@ -309,7 +309,7 @@ namespace kinematic_viewer {
             return glm::vec3(world_from_local * glm::vec4(clamped, 1.0f));
         }
 
-        void evalLinkVsObstacle(const teleop_viewer::RobotScene::LinkCollisionProxy& link, const UserObstacleItem& obs,
+        void evalLinkVsObstacle(const rkv::RobotScene::LinkCollisionProxy& link, const UserObstacleItem& obs,
                                 float* surface_distance_m, float* center_distance_m, glm::vec3* point_on_link,
                                 glm::vec3* point_on_obstacle) {
             const glm::vec3 cL = link.world_center;
@@ -1130,7 +1130,7 @@ namespace kinematic_viewer {
         }
     }
 
-    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const teleop_viewer::RobotScene& scene,
+    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene,
                                                float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result) {
         if (result == nullptr || !obstacles.affect_collision) {
             return;

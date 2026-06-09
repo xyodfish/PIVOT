@@ -4,11 +4,11 @@
 #include "kinematic_viewer/kinematic_link_kinematics.h"
 #include "kinematic_viewer/kinematic_playback_state.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <glm/vec3.hpp>
 
-namespace teleop_viewer {
+namespace rkv {
     class OrbitCamera;
 }
 
@@ -25,17 +25,17 @@ namespace kinematic_viewer {
     };
 
     LinkSafetyInspectInfo BuildLinkSafetyInfo(const std::string& link_name, const CollisionMonitorState& collision_state,
-                                              const CollisionMonitorResult& collision_result, const teleop_viewer::RobotScene& scene);
+                                              const CollisionMonitorResult& collision_result, const rkv::RobotScene& scene);
 
     float ScanTrajectoryMinSurfaceDistanceForLink(const std::string& link_name, const DebugPlaybackState& playback,
                                                   const CollisionMonitorState& collision_state, CollisionMonitor* monitor,
-                                                  teleop_viewer::RobotScene* scene);
+                                                  rkv::RobotScene* scene);
 
-    bool GetLinkWorldFocusPoint(const teleop_viewer::RobotScene& scene, const std::string& link_name, glm::vec3* out_position);
+    bool GetLinkWorldFocusPoint(const rkv::RobotScene& scene, const std::string& link_name, glm::vec3* out_position);
 
-    void FocusCameraOnLink(teleop_viewer::OrbitCamera* camera, const teleop_viewer::RobotScene& scene, const std::string& link_name);
+    void FocusCameraOnLink(rkv::OrbitCamera* camera, const rkv::RobotScene& scene, const std::string& link_name);
 
-    void RenderLinkInspectorPanel(ViewerState* ui_state, teleop_viewer::RobotScene* scene, teleop_viewer::OrbitCamera* camera,
+    void RenderLinkInspectorPanel(ViewerState* ui_state, rkv::RobotScene* scene, rkv::OrbitCamera* camera,
                                   const CollisionMonitorState* collision_state, const CollisionMonitorResult* collision_result,
                                   DebugPlaybackState* playback_state, CollisionMonitor* collision_monitor,
                                   LinkKinematicsAnalyzer* kinematics_analyzer);

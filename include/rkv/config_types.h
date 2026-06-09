@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace teleop_viewer {
+namespace rkv {
 
     struct WindowConfig {
         int width         = 1280;
@@ -86,4 +86,4 @@ namespace teleop_viewer {
         };
     };
 
-}  // namespace teleop_viewer
+}  // namespace rkv

@@ -2,7 +2,7 @@
 
 #include "kinematic_viewer/kinematic_collision_monitor.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <glad/glad.h>
 
@@ -35,7 +35,7 @@ namespace kinematic_viewer {
 
     void RenderUserObstaclePanel(UserObstacleState* obstacles, bool angle_unit_deg = true);
 
-    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const teleop_viewer::RobotScene& scene,
+    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene,
                                                float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result);
 
 }  // namespace kinematic_viewer

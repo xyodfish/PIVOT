@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "teleop_viewer/types.h"
+#include "rkv/types.h"
 
-namespace teleop_viewer {
+namespace rkv {
 
     class OrbitCamera {
        public:
@@ -61,6 +61,9 @@ namespace teleop_viewer {
             std::string visual_name;
             glm::vec3 world_center = glm::vec3(0.0f);
             float radius_m         = 0.0f;
+            bool has_world_aabb    = false;
+            glm::vec3 world_aabb_min = glm::vec3(0.0f);
+            glm::vec3 world_aabb_max = glm::vec3(0.0f);
         };
 
         struct LinkComInfo {
@@ -101,12 +104,14 @@ namespace teleop_viewer {
         size_t applyJointSamples(const std::vector<SensorJointSample>& samples, bool only_master_arm);
         bool setJointPositionByName(const std::string& joint_name, float new_position);
         bool consumeJointPoseDirty();
+        bool isJointPoseDirty() const;
 
         bool getJointInfo(const std::string& joint_name, JointInfo* out) const;
         std::vector<JointInfo> getJointInfos() const;
         std::vector<JointAxisInfo> getJointAxisInfos(bool revolute_only = true) const;
         std::vector<LinkTfInfo> getLinkTfInfos() const;
         std::vector<LinkCollisionProxy> getLinkCollisionProxies() const;
+        void appendLinkWorldCollisionTriangles(const std::string& link_name, std::vector<glm::vec3>* out_triangles) const;
         std::vector<LinkComInfo> getLinkComWorldPositions() const;
         bool getLinkWorldTransform(const std::string& link_name, glm::mat4* out_world_transform) const;
         bool getLinkParentName(const std::string& link_name, std::string* out_parent_name) const;
@@ -131,4 +136,4 @@ namespace teleop_viewer {
         std::unique_ptr<Impl> impl_;
     };
 
-}  // namespace teleop_viewer
+}  // namespace rkv

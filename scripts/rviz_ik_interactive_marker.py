@@ -31,9 +31,9 @@ def quaternionFromRpy(roll: float, pitch: float, yaw: float) -> Quaternion:
 class RvizIkMarkerNode:
     def __init__(self) -> None:
         self.frameId_ = rospy.get_param("~frame_id", "world")
-        self.serverNs_ = rospy.get_param("~server_ns", "teleop_gui_ik_marker")
+        self.serverNs_ = rospy.get_param("~server_ns", "rkv_ik_marker")
         self.markerName_ = rospy.get_param("~marker_name", "ik_target")
-        self.publishTopic_ = rospy.get_param("~publish_topic", "/teleop_gui/ik_target_pose")
+        self.publishTopic_ = rospy.get_param("~publish_topic", "/rkv/ik_target_pose")
         self.publishRate_ = float(rospy.get_param("~publish_rate_hz", 30.0))
         self.feedbackPublishRate_ = float(rospy.get_param("~feedback_publish_rate_hz", self.publishRate_))
         self.markerScale_ = float(rospy.get_param("~marker_scale", 0.30))

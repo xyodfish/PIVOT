@@ -1,7 +1,7 @@
 #pragma once
 
-#include "teleop_viewer/scene.h"
-#include "teleop_viewer/ik_solver.h"
+#include "rkv/scene.h"
+#include "rkv/ik_solver.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -113,15 +113,15 @@ namespace kinematic_viewer {
     // IK solver wrapper for path planning (single chain mode)
     // Takes a Cartesian path and solves IK for each waypoint using single_chain mode
     // Returns joint names and positions for each waypoint
-    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
-                                                 teleop_viewer::IkSolver* solver, int chain_index,
+    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene,
+                                                 rkv::IkSolver* solver, int chain_index,
                                                  const IkSolveProgressCallback& progress_cb = nullptr);
 
     // IK solver wrapper for path planning (full body mode)
     // Uses solveFullBody for better multi-chain coordination and solve quality
     // Other chains keep their current pose while the active chain follows the path
-    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
-                                                         teleop_viewer::IkSolver* solver, int chain_index,
+    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene,
+                                                         rkv::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb = nullptr);
 
     // Joint-space point-to-point velocity planning for all joints from start to goal positions.

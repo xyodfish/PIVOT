@@ -1,17 +1,17 @@
 #pragma once
 
-#include "teleop_viewer/config_types.h"
+#include "rkv/config_types.h"
 
 #include <string>
 
 namespace kinematic_viewer {
 
-    using CameraConfig        = teleop_viewer::CameraConfig;
-    using RobotConfig         = teleop_viewer::RobotConfig;
-    using UiConfig            = teleop_viewer::UiConfig;
-    using ViewerIkConfig      = teleop_viewer::ViewerIkConfig;
-    using ViewerIkChainConfig = teleop_viewer::ViewerIkChainConfig;
-    using WindowConfig        = teleop_viewer::WindowConfig;
+    using CameraConfig        = rkv::CameraConfig;
+    using RobotConfig         = rkv::RobotConfig;
+    using UiConfig            = rkv::UiConfig;
+    using ViewerIkConfig      = rkv::ViewerIkConfig;
+    using ViewerIkChainConfig = rkv::ViewerIkChainConfig;
+    using WindowConfig        = rkv::WindowConfig;
 
     struct KinematicRosConfig {
         bool enable = true;

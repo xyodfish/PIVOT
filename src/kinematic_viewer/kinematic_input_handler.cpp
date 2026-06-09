@@ -82,7 +82,7 @@ namespace kinematic_viewer {
         return (x >= 0.0 && x < static_cast<double>(viewport_w) && y >= 0.0 && y < static_cast<double>(viewport_h));
     }
 
-    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(teleop_viewer::OrbitCamera* camera,
+    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(rkv::OrbitCamera* camera,
                                                                                  const UpdateContext& ctx) {
         CameraInputResult result;
         if (!camera) {
@@ -174,7 +174,7 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view,
-                                                                                const glm::mat4& proj, teleop_viewer::RobotScene* scene) {
+                                                                                const glm::mat4& proj, rkv::RobotScene* scene) {
         LinkPickResult result;
         if (scene == nullptr) {
             return result;
@@ -217,7 +217,7 @@ namespace kinematic_viewer {
         }
 
         std::string picked_link;
-        if (scene->pickLinkByRay(ray_o, ray_d, &picked_link, nullptr, teleop_viewer::RobotScene::LinkPickMode::Accurate)) {
+        if (scene->pickLinkByRay(ray_o, ray_d, &picked_link, nullptr, rkv::RobotScene::LinkPickMode::Accurate)) {
             result.picked    = true;
             result.link_name = std::move(picked_link);
         }
@@ -225,7 +225,7 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view,
-                                                                                 const glm::mat4& proj, teleop_viewer::RobotScene* scene,
+                                                                                 const glm::mat4& proj, rkv::RobotScene* scene,
                                                                                  double now_sec) {
         LinkPickResult result;
         if (scene == nullptr) {
@@ -252,7 +252,7 @@ namespace kinematic_viewer {
         }
 
         std::string hovered_link;
-        if (scene->pickLinkByRay(ray_o, ray_d, &hovered_link, nullptr, teleop_viewer::RobotScene::LinkPickMode::Fast)) {
+        if (scene->pickLinkByRay(ray_o, ray_d, &hovered_link, nullptr, rkv::RobotScene::LinkPickMode::Fast)) {
             result.picked    = true;
             result.link_name = std::move(hovered_link);
         }
@@ -286,6 +286,21 @@ namespace kinematic_viewer {
         if (ImGui::IsKeyPressed(ImGuiKey_9) && clamped_count >= 9)
             return 8;
         return current_page;
+    }
+
+    KinematicInputHandler::ViewportHotkeyResult KinematicInputHandler::HandleViewportHotkeys(bool enable_hotkeys,
+                                                                                            bool has_playable_trajectory) {
+        ViewportHotkeyResult result;
+        if (!enable_hotkeys) {
+            return result;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_H)) {
+            result.toggled_sidebar = true;
+        }
+        if (has_playable_trajectory && ImGui::IsKeyPressed(ImGuiKey_Space)) {
+            result.toggled_playback = true;
+        }
+        return result;
     }
 
     void KinematicInputHandler::ResetMouseTracking() {

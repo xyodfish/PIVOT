@@ -1,6 +1,7 @@
 #include "kinematic_viewer/kinematic_link_inspector.h"
 
 #include "kinematic_viewer/kinematic_angle_units.h"
+#include "kinematic_viewer/kinematic_collision_distance.h"
 
 #include "imgui.h"
 
@@ -18,7 +19,7 @@ namespace kinematic_viewer {
 
     }  // namespace
 
-    bool GetLinkWorldFocusPoint(const teleop_viewer::RobotScene& scene, const std::string& link_name, glm::vec3* out_position) {
+    bool GetLinkWorldFocusPoint(const rkv::RobotScene& scene, const std::string& link_name, glm::vec3* out_position) {
         if (out_position == nullptr || link_name.empty()) {
             return false;
         }
@@ -36,7 +37,7 @@ namespace kinematic_viewer {
         return false;
     }
 
-    void FocusCameraOnLink(teleop_viewer::OrbitCamera* camera, const teleop_viewer::RobotScene& scene, const std::string& link_name) {
+    void FocusCameraOnLink(rkv::OrbitCamera* camera, const rkv::RobotScene& scene, const std::string& link_name) {
         if (camera == nullptr) {
             return;
         }
@@ -47,7 +48,7 @@ namespace kinematic_viewer {
     }
 
     LinkSafetyInspectInfo BuildLinkSafetyInfo(const std::string& link_name, const CollisionMonitorState& collision_state,
-                                              const CollisionMonitorResult& collision_result, const teleop_viewer::RobotScene& scene) {
+                                              const CollisionMonitorResult& collision_result, const rkv::RobotScene& scene) {
         LinkSafetyInspectInfo info;
         if (collision_result.valid) {
             info.has_global_closest = true;
@@ -67,19 +68,10 @@ namespace kinematic_viewer {
                 if (a.link_name != link_name && b.link_name != link_name) {
                     continue;
                 }
-                CollisionPairDistance distance;
-                const glm::vec3 delta       = b.world_center - a.world_center;
-                const float center_distance = glm::length(delta);
-                distance.link_a             = a.link_name;
-                distance.link_b             = b.link_name;
-                distance.center_distance_m  = center_distance;
-                glm::vec3 direction(1.0f, 0.0f, 0.0f);
-                if (center_distance > 1e-6f) {
-                    direction = delta / center_distance;
+                CollisionPairDistance distance = BuildCollisionPairDistanceAabb(a, b);
+                if (a.link_name == link_name || b.link_name == link_name) {
+                    distance = RefineCollisionPairDistanceWithMesh(scene, distance);
                 }
-                distance.point_a            = a.world_center + direction * a.radius_m;
-                distance.point_b            = b.world_center - direction * b.radius_m;
-                distance.surface_distance_m = center_distance - (a.radius_m + b.radius_m);
 
                 if (!has_closest || distance.surface_distance_m < info.pair_involving_link.surface_distance_m) {
                     info.pair_involving_link = distance;
@@ -93,7 +85,7 @@ namespace kinematic_viewer {
 
     float ScanTrajectoryMinSurfaceDistanceForLink(const std::string& link_name, const DebugPlaybackState& playback,
                                                   const CollisionMonitorState& collision_state, CollisionMonitor* monitor,
-                                                  teleop_viewer::RobotScene* scene) {
+                                                  rkv::RobotScene* scene) {
         if (link_name.empty() || monitor == nullptr || scene == nullptr || playback.keyframes.empty()) {
             return -1.0f;
         }
@@ -135,7 +127,7 @@ namespace kinematic_viewer {
         return min_surface;
     }
 
-    void RenderLinkInspectorPanel(ViewerState* ui_state, teleop_viewer::RobotScene* scene, teleop_viewer::OrbitCamera* camera,
+    void RenderLinkInspectorPanel(ViewerState* ui_state, rkv::RobotScene* scene, rkv::OrbitCamera* camera,
                                   const CollisionMonitorState* collision_state, const CollisionMonitorResult* collision_result,
                                   DebugPlaybackState* playback_state, CollisionMonitor* collision_monitor,
                                   LinkKinematicsAnalyzer* kinematics_analyzer) {
@@ -169,7 +161,7 @@ namespace kinematic_viewer {
         scene->getLinkParentName(link_name, &parent_link);
 
         std::string parent_joint_name;
-        teleop_viewer::RobotScene::JointDetailInfo joint_detail;
+        rkv::RobotScene::JointDetailInfo joint_detail;
         const bool has_joint =
             scene->getParentJointNameForLink(link_name, &parent_joint_name) && scene->getJointDetail(parent_joint_name, &joint_detail);
 

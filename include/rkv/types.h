@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace teleop_viewer {
+namespace rkv {
 
     struct SensorJointSample {
         std::string group;
@@ -78,4 +78,4 @@ namespace teleop_viewer {
                joint_name.find("virtual") != std::string::npos || joint_name.find("base") != std::string::npos;
     }
 
-}  // namespace teleop_viewer
+}  // namespace rkv

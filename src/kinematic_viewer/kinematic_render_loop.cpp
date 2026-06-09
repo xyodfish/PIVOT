@@ -12,7 +12,7 @@ namespace kinematic_viewer {
             return;
         }
 
-        SetupViewportAndClear(ctx.viewport_w, ctx.viewport_h);
+        SetupViewportAndClear(ctx);
 
         const glm::mat4 proj =
             glm::perspective(glm::radians(50.0f), static_cast<float>(ctx.viewport_w) / static_cast<float>(ctx.viewport_h), 0.05f, 80.0f);
@@ -28,10 +28,14 @@ namespace kinematic_viewer {
         DrawLineOverlays(ctx.line_shader, ctx, axis_vertices, view, proj);
     }
 
-    void KinematicRenderLoop::SetupViewportAndClear(int w, int h) {
-        glViewport(0, 0, w, h);
+    void KinematicRenderLoop::SetupViewportAndClear(const Context& ctx) {
+        glViewport(0, 0, ctx.viewport_w, ctx.viewport_h);
         glEnable(GL_DEPTH_TEST);
-        glClearColor(0.90f, 0.92f, 0.96f, 1.0f);
+        if (ctx.demo_visual_mode) {
+            glClearColor(0.07f, 0.08f, 0.10f, 1.0f);
+        } else {
+            glClearColor(0.90f, 0.92f, 0.96f, 1.0f);
+        }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
@@ -47,7 +51,7 @@ namespace kinematic_viewer {
     void KinematicRenderLoop::DrawSceneMeshes(GLuint shader, const Context& ctx, const glm::mat4& proj, const glm::mat4& view) {
         SetupMeshShaderUniforms(shader, proj, view, ctx.camera->eye());
 
-        teleop_viewer::RobotScene::SceneDrawStyle style;
+        rkv::RobotScene::SceneDrawStyle style;
         if (ctx.ui_state != nullptr) {
             style.show_visual_meshes    = ctx.ui_state->show_visual_meshes;
             style.show_collision_bodies = ctx.ui_state->show_collision_bodies;
@@ -140,6 +144,9 @@ namespace kinematic_viewer {
     }
 
     void KinematicRenderLoop::BuildGridLines(const Context& ctx, std::vector<KinematicLineVertex>* out) {
+        if (ctx.ui_state == nullptr || !ctx.ui_state->show_grid) {
+            return;
+        }
         float half = ctx.ui_state->grid_size;
         int count  = std::max(2, ctx.ui_state->grid_count);
         glm::vec3 grid_col(0.72f, 0.76f, 0.82f);

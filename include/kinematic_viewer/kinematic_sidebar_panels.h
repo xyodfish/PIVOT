@@ -7,26 +7,26 @@
 #include "kinematic_viewer/kinematic_playback.h"
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <vector>
 
 namespace kinematic_viewer {
     class KinematicIkController;
 
-    void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene = nullptr);
-    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, teleop_viewer::RobotScene* scene);
-    void RenderLinkInspectorPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene, teleop_viewer::OrbitCamera* camera,
+    void RenderScenePanel(ViewerState* uiState, rkv::RobotScene* scene = nullptr);
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, rkv::RobotScene* scene);
+    void RenderLinkInspectorPanel(ViewerState* uiState, rkv::RobotScene* scene, rkv::OrbitCamera* camera,
                                   const CollisionMonitorState* collisionState, const CollisionMonitorResult* collisionResult,
                                   DebugPlaybackState* playbackState, CollisionMonitor* collisionMonitor,
                                   LinkKinematicsAnalyzer* kinematicsAnalyzer);
-    void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
-                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
+    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene,
+                          const std::vector<rkv::RobotScene::JointInfo>& joints);
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             teleop_viewer::RobotScene* scene, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints);
+                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints);
     void RenderSafetyPanel(CollisionMonitorState* collisionState, const CollisionMonitorResult& collisionResult);
     void RenderObstaclePanel(ViewerState* uiState);
-    void RenderTfPanel(ViewerState* uiState, const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs);
+    void RenderTfPanel(ViewerState* uiState, const std::vector<rkv::RobotScene::LinkTfInfo>& tfs);
 
     // Path planning panel
     struct PathPlannerUiState {
@@ -88,7 +88,7 @@ namespace kinematic_viewer {
     };
 
     void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,
-                                teleop_viewer::RobotScene* scene, teleop_viewer::IkSolver* solver,
-                                const std::vector<teleop_viewer::IkChainStatus>& chains);
+                                rkv::RobotScene* scene, rkv::IkSolver* solver,
+                                const std::vector<rkv::IkChainStatus>& chains);
 
 }  // namespace kinematic_viewer

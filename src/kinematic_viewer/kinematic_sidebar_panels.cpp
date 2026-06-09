@@ -3,6 +3,7 @@
 #include "kinematic_viewer/kinematic_ik_controller.h"
 #include "kinematic_viewer/kinematic_marker_utils.h"
 #include "kinematic_viewer/kinematic_angle_units.h"
+#include "kinematic_viewer/kinematic_demo_visual.h"
 #include "kinematic_viewer/kinematic_sidebar_layout.h"
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
@@ -132,11 +133,11 @@ namespace kinematic_viewer {
             return true;
         }
 
-        bool TryReadJointPositionRad(teleop_viewer::RobotScene* scene, const std::string& joint_name, float* out_rad) {
+        bool TryReadJointPositionRad(rkv::RobotScene* scene, const std::string& joint_name, float* out_rad) {
             if (scene == nullptr || out_rad == nullptr) {
                 return false;
             }
-            teleop_viewer::RobotScene::JointInfo info;
+            rkv::RobotScene::JointInfo info;
             if (!scene->getJointInfo(joint_name, &info)) {
                 return false;
             }
@@ -144,7 +145,7 @@ namespace kinematic_viewer {
             return true;
         }
 
-        std::string FormatJointGroupLine(const ViewerState::JointInputGroup& group, teleop_viewer::RobotScene* scene, bool use_deg) {
+        std::string FormatJointGroupLine(const ViewerState::JointInputGroup& group, rkv::RobotScene* scene, bool use_deg) {
             const int precision = use_deg ? 2 : 4;
             std::ostringstream ss;
             ss << group.name << ": ";
@@ -162,7 +163,7 @@ namespace kinematic_viewer {
             return ss.str();
         }
 
-        std::string FormatAllJointGroups(const ViewerState& uiState, teleop_viewer::RobotScene* scene, bool use_deg) {
+        std::string FormatAllJointGroups(const ViewerState& uiState, rkv::RobotScene* scene, bool use_deg) {
             std::ostringstream ss;
             for (size_t g = 0; g < uiState.joint_input_groups.size(); ++g) {
                 if (g > 0) {
@@ -201,7 +202,7 @@ namespace kinematic_viewer {
             return nullptr;
         }
 
-        bool ApplyJointGroupTextCommand(const std::string& commandLine, const ViewerState& uiState, teleop_viewer::RobotScene* scene,
+        bool ApplyJointGroupTextCommand(const std::string& commandLine, const ViewerState& uiState, rkv::RobotScene* scene,
                                         std::string* errorMessage) {
             if (scene == nullptr) {
                 if (errorMessage != nullptr) {
@@ -284,7 +285,7 @@ namespace kinematic_viewer {
         }
 
         bool ApplyJointGroupValues(const ViewerState::JointInputGroup& group, const std::vector<float>& values,
-                                   teleop_viewer::RobotScene* scene, std::string* errorMessage) {
+                                   rkv::RobotScene* scene, std::string* errorMessage) {
             if (scene == nullptr) {
                 if (errorMessage != nullptr) {
                     *errorMessage = "内部错误：scene为空";
@@ -655,7 +656,7 @@ namespace kinematic_viewer {
             ImGui::EndPopup();
         }
 
-        void FillMobileBasePoseInput(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
+        void FillMobileBasePoseInput(ViewerState* uiState, rkv::RobotScene* scene) {
             if (uiState == nullptr || scene == nullptr) {
                 return;
             }
@@ -676,7 +677,7 @@ namespace kinematic_viewer {
             std::snprintf(uiState->mobile_base_pose_input, sizeof(uiState->mobile_base_pose_input), "%s", text.c_str());
         }
 
-        bool ApplyMobileBasePoseInput(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
+        bool ApplyMobileBasePoseInput(ViewerState* uiState, rkv::RobotScene* scene) {
             if (uiState == nullptr || scene == nullptr) {
                 return false;
             }
@@ -713,12 +714,22 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_sidebar_panels_internal
 
-    void RenderScenePanel(ViewerState* uiState, teleop_viewer::RobotScene* scene) {
+    void RenderScenePanel(ViewerState* uiState, rkv::RobotScene* scene) {
         if (uiState == nullptr) {
             return;
         }
         if (!ImGui::CollapsingHeader("场景显示", ImGuiTreeNodeFlags_DefaultOpen)) {
             return;
+        }
+        {
+            bool demo_enabled = uiState->demo_visual_mode;
+            if (ImGui::Checkbox("演示视觉（暗底·隐藏轴网）", &demo_enabled)) {
+                SetDemoVisualMode(uiState, demo_enabled);
+            }
+            if (uiState->demo_visual_mode) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("录屏/展示推荐");
+            }
         }
         SidebarCheckboxRow4("网格", &uiState->show_visual_meshes, "线框", &uiState->show_wireframe, "碰撞体",
                             &uiState->show_collision_bodies, "质心", &uiState->show_com);
@@ -775,6 +786,7 @@ namespace kinematic_viewer {
             ImGui::TextDisabled("当前机器人未启用底盘拖动（见配置 ui.mobile_base_robots）");
         }
         if (ImGui::TreeNode("轴与网格")) {
+            ImGui::Checkbox("地面网格", &uiState->show_grid);
             SidebarSliderFloat("轴长", &uiState->axis_length, 0.03f, 0.5f, "%.3f");
             SidebarSliderFloat("线宽", &uiState->axis_line_width, 1.0f, 6.0f, "%.1f");
             SidebarSliderFloat("世界轴长", &uiState->world_axis_length, 0.1f, 1.5f, "%.2f");
@@ -794,7 +806,7 @@ namespace kinematic_viewer {
         RenderUserObstaclePanel(&uiState->user_obstacles, uiState->angle_unit_deg);
     }
 
-    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, teleop_viewer::RobotScene* scene) {
+    void RenderIkPanel(ViewerState* uiState, IkState* ikState, KinematicIkController* ikController, rkv::RobotScene* scene) {
         if (uiState == nullptr || ikState == nullptr || ikController == nullptr || scene == nullptr) {
             return;
         }
@@ -1035,8 +1047,8 @@ namespace kinematic_viewer {
         }
     }
 
-    void RenderJointPanel(ViewerState* uiState, teleop_viewer::RobotScene* scene,
-                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints) {
+    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene,
+                          const std::vector<rkv::RobotScene::JointInfo>& joints) {
         if (uiState == nullptr || scene == nullptr) {
             return;
         }
@@ -1291,7 +1303,7 @@ namespace kinematic_viewer {
                 ImGui::TableSetColumnIndex(0);
                 const bool joint_row_selected = (!parent_joint_for_selected_link.empty() && j.name == parent_joint_for_selected_link);
                 if (ImGui::Selectable(j.name.c_str(), joint_row_selected)) {
-                    teleop_viewer::RobotScene::JointDetailInfo detail;
+                    rkv::RobotScene::JointDetailInfo detail;
                     if (scene->getJointDetail(j.name, &detail)) {
                         uiState->selected_link            = detail.child_link;
                         uiState->trajectory_min_surface_m = -1.0f;
@@ -1307,7 +1319,7 @@ namespace kinematic_viewer {
                     float uiValue           = AngleUiFromRad(j.position, joint_use_deg);
                     ImGuiContext* imgui_ctx = ImGui::GetCurrentContext();
                     if (imgui_ctx != nullptr && imgui_ctx->ActiveId != slider_id && imgui_ctx->ActiveId != input_id) {
-                        teleop_viewer::RobotScene::JointInfo live;
+                        rkv::RobotScene::JointInfo live;
                         if (scene->getJointInfo(j.name, &live)) {
                             uiValue = AngleUiFromRad(live.position, joint_use_deg);
                         }
@@ -1331,7 +1343,7 @@ namespace kinematic_viewer {
                     ImGui::TextDisabled("-");
                     ImGui::TableSetColumnIndex(2);
                     float pos_m = j.position;
-                    teleop_viewer::RobotScene::JointInfo live;
+                    rkv::RobotScene::JointInfo live;
                     if (scene->getJointInfo(j.name, &live)) {
                         pos_m = live.position;
                     }
@@ -1363,7 +1375,7 @@ namespace kinematic_viewer {
     }
 
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             teleop_viewer::RobotScene* scene, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints) {
+                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints) {
         if (playbackState == nullptr || playbackPlayer == nullptr || playback_sm == nullptr || scene == nullptr) {
             return;
         }
@@ -1644,7 +1656,7 @@ namespace kinematic_viewer {
             return;
         }
         SidebarCheckboxRow2("启用", &collisionState->enable, "最近对连线", &collisionState->show_closest_pair_line);
-        SidebarCheckboxRow2("忽略同Link", &collisionState->ignore_same_link, "忽略父子", &collisionState->ignore_parent_child);
+        SidebarCheckboxRow2("忽略同Link", &collisionState->ignore_same_link, "忽略相连", &collisionState->ignore_parent_child);
         SidebarDragFloat("Danger (m)", &collisionState->danger_distance_m, 0.002f, -0.20f, 0.30f, "%.3f");
         SidebarDragFloat("Warning (m)", &collisionState->warning_distance_m, 0.002f, -0.20f, 0.50f, "%.3f");
         if (collisionState->warning_distance_m < collisionState->danger_distance_m) {
@@ -1685,7 +1697,7 @@ namespace kinematic_viewer {
         ImGui::Text("中心距离: %.3f m", collisionState->nearest_center_distance_m);
     }
 
-    void RenderTfPanel(ViewerState* uiState, const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs) {
+    void RenderTfPanel(ViewerState* uiState, const std::vector<rkv::RobotScene::LinkTfInfo>& tfs) {
         if (uiState == nullptr) {
             return;
         }
@@ -1742,8 +1754,8 @@ namespace kinematic_viewer {
     // Path Planner Panel
     // ------------------------------------------------------------------
     void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* ui, DebugPlaybackState* playbackState,
-                                teleop_viewer::RobotScene* scene, teleop_viewer::IkSolver* solver,
-                                const std::vector<teleop_viewer::IkChainStatus>& chains) {
+                                rkv::RobotScene* scene, rkv::IkSolver* solver,
+                                const std::vector<rkv::IkChainStatus>& chains) {
         if (uiState == nullptr || ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
             return;
         }

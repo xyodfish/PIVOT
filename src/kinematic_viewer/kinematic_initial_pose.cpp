@@ -8,7 +8,7 @@
 namespace kinematic_viewer {
     namespace kinematic_initial_pose_internal {
 
-        void ApplyJointGroup(const std::vector<std::string>& jointNames, const std::vector<float>& values, teleop_viewer::RobotScene* scene,
+        void ApplyJointGroup(const std::vector<std::string>& jointNames, const std::vector<float>& values, rkv::RobotScene* scene,
                              InitialPoseApplyResult* result, std::vector<std::string>* missingJointNames) {
             if (scene == nullptr || result == nullptr || missingJointNames == nullptr) {
                 return;
@@ -27,7 +27,7 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_initial_pose_internal
 
-    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, teleop_viewer::RobotScene* scene) {
+    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, rkv::RobotScene* scene) {
         InitialPoseApplyResult result;
         if (scene == nullptr) {
             result.detail = "scene is null";

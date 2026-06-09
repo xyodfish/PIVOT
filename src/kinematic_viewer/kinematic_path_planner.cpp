@@ -362,8 +362,8 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // IK Solver for Cartesian Path (serial solve with scene state update)
     // ------------------------------------------------------------------
-    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
-                                                 teleop_viewer::IkSolver* solver, int chain_index,
+    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene,
+                                                 rkv::IkSolver* solver, int chain_index,
                                                  const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;
         if (!cartesian_path.success || cartesian_path.waypoints.empty()) {
@@ -457,8 +457,8 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // IK Solver for Cartesian Path (Full Body Mode)
     // ------------------------------------------------------------------
-    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, teleop_viewer::RobotScene* scene,
-                                                         teleop_viewer::IkSolver* solver, int chain_index,
+    JointSpaceTrajectory solveIkForCartesianPathFullBody(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene,
+                                                         rkv::IkSolver* solver, int chain_index,
                                                          const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;
         if (!cartesian_path.success || cartesian_path.waypoints.empty()) {
@@ -519,7 +519,7 @@ namespace kinematic_viewer {
             targets[static_cast<size_t>(chain_index)]    = glm::mat4_cast(wp.orientation);
             targets[static_cast<size_t>(chain_index)][3] = glm::vec4(wp.position, 1.0f);
 
-            teleop_viewer::IkSolveStats stats;
+            rkv::IkSolveStats stats;
             std::string ik_status;
             bool ik_success = solver->solveFullBody(scene, targets, 1, chain_index, false, false, &stats, &ik_status);
 

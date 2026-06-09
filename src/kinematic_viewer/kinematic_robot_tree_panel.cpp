@@ -16,7 +16,7 @@ namespace kinematic_viewer {
             std::vector<TreeNode> children;
         };
 
-        void CollectRoots(const std::vector<teleop_viewer::RobotScene::LinkTfInfo>& tfs, std::vector<TreeNode>* out_roots) {
+        void CollectRoots(const std::vector<rkv::RobotScene::LinkTfInfo>& tfs, std::vector<TreeNode>* out_roots) {
             if (out_roots == nullptr) {
                 return;
             }
@@ -68,7 +68,7 @@ namespace kinematic_viewer {
             return false;
         }
 
-        void DrawTreeNode(const TreeNode& node, ViewerState* ui_state, teleop_viewer::RobotScene* scene, const std::string& filter_lower) {
+        void DrawTreeNode(const TreeNode& node, ViewerState* ui_state, rkv::RobotScene* scene, const std::string& filter_lower) {
             if (!TreeNodeMatchesFilter(node, filter_lower)) {
                 return;
             }
@@ -109,7 +109,7 @@ namespace kinematic_viewer {
 
     }  // namespace
 
-    void RenderRobotTreePanel(ViewerState* ui_state, teleop_viewer::RobotScene* scene) {
+    void RenderRobotTreePanel(ViewerState* ui_state, rkv::RobotScene* scene) {
         if (ui_state == nullptr || scene == nullptr) {
             return;
         }
@@ -146,7 +146,7 @@ namespace kinematic_viewer {
                 if (!filter.empty() && key.find(filter) == std::string::npos) {
                     continue;
                 }
-                teleop_viewer::RobotScene::JointDetailInfo detail;
+                rkv::RobotScene::JointDetailInfo detail;
                 const bool has_detail = scene->getJointDetail(j.name, &detail);
                 const bool selected   = (ui_state->selected_joint == i);
                 if (ImGui::Selectable(j.name.c_str(), selected)) {

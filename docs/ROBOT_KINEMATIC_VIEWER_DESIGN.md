@@ -31,7 +31,7 @@
 - `kinematic_playback`：轨迹状态机与插值采样。
 - `kinematic_collision_monitor`：碰撞代理构建后的距离评估。
 - `kinematic_sidebar_panels`：仅负责 UI 展示与交互输入，不做核心算法。
-- `teleop_viewer::RobotScene`：提供只读几何代理接口（link collision proxies）。
+- `rkv::RobotScene`：提供只读几何代理接口（link collision proxies）。
 
 ### 3.2 设计模式
 - Strategy

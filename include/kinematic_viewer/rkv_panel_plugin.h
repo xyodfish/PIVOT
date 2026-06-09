@@ -26,8 +26,8 @@ struct RkvPanelCtx {
     void* viewer_state;        // kinematic_viewer::ViewerState*
     void* ik_state;            // kinematic_viewer::IkState*
     void* ik_controller;       // kinematic_viewer::KinematicIkController*
-    void* scene;               // teleop_viewer::RobotScene*
-    void* camera;              // teleop_viewer::OrbitCamera*
+    void* scene;               // rkv::RobotScene*
+    void* camera;              // rkv::OrbitCamera*
 
     // ------ collision ------
     void* collision_state;     // kinematic_viewer::CollisionMonitorState*
@@ -51,10 +51,10 @@ struct RkvPanelCtx {
     void* link_kinematics_analyzer; // kinematic_viewer::LinkKinematicsAnalyzer*
 
     // ------ misc ------
-    void* joints;              // std::vector<teleop_viewer::RobotScene::JointInfo>*
-    void* tf_infos;            // std::vector<teleop_viewer::RobotScene::LinkTfInfo>*
-    void* ik_solver;           // teleop_viewer::IkSolver*
-    void* ik_chains;           // std::vector<teleop_viewer::IkChainStatus>*
+    void* joints;              // std::vector<rkv::RobotScene::JointInfo>*
+    void* tf_infos;            // std::vector<rkv::RobotScene::LinkTfInfo>*
+    void* ik_solver;           // rkv::IkSolver*
+    void* ik_chains;           // std::vector<rkv::IkChainStatus>*
 };
 
 typedef void (*RkvPanelInfoFn)(RkvPanelInfo*);

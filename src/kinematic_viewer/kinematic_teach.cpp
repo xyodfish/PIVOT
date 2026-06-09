@@ -27,7 +27,7 @@ namespace kinematic_viewer {
             return out;
         }
 
-        bool FindLinkWorldPose(const teleop_viewer::RobotScene& scene, const std::string& link_name, glm::vec3* position,
+        bool FindLinkWorldPose(const rkv::RobotScene& scene, const std::string& link_name, glm::vec3* position,
                                glm::quat* orientation) {
             if (position == nullptr || orientation == nullptr || link_name.empty()) {
                 return false;
@@ -160,8 +160,8 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_teach_internal
 
-    void CaptureTeachPointFromScene(TeachProgramState* teach, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                    const teleop_viewer::RobotScene& scene, const std::string& ee_tip_link) {
+    void CaptureTeachPointFromScene(TeachProgramState* teach, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                    const rkv::RobotScene& scene, const std::string& ee_tip_link) {
         if (teach == nullptr) {
             return;
         }
@@ -198,7 +198,7 @@ namespace kinematic_viewer {
         }
     }
 
-    void ApplyTeachPointToScene(const TeachPoint& point, teleop_viewer::RobotScene* scene) {
+    void ApplyTeachPointToScene(const TeachPoint& point, rkv::RobotScene* scene) {
         if (scene == nullptr) {
             return;
         }

@@ -14,6 +14,8 @@
 #include "kinematic_viewer/kinematic_link_kinematics.h"
 #include "kinematic_viewer/kinematic_link_inspector.h"
 #include "kinematic_viewer/kinematic_config_watcher.h"
+#include "kinematic_viewer/kinematic_demo_visual.h"
+#include "kinematic_viewer/kinematic_viewport_hud.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
 #include "kinematic_viewer/kinematic_shader_utils.h"
 #include "kinematic_viewer/kinematic_robot_tree_panel.h"
@@ -32,8 +34,8 @@
 #include "kinematic_viewer/kinematic_viewer_config.h"
 #include "kinematic_viewer/rkv_panel_plugin.h"
 #include "kinematic_viewer/rkv_panel_registry.h"
-#include "teleop_viewer/ik_solver.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/ik_solver.h"
+#include "rkv/scene.h"
 
 #include "ImGuizmo.h"
 #include "imgui.h"
@@ -110,9 +112,9 @@ using kinematic_viewer::UserObstacleGpuMeshes;
 using kinematic_viewer::ViewerState;
 using kinematic_viewer::worldToScreen;
 using kinematic_viewer::wrapDeltaDeg;
-using teleop_viewer::IkSolveStats;
-using teleop_viewer::OrbitCamera;
-using teleop_viewer::RobotScene;
+using rkv::IkSolveStats;
+using rkv::OrbitCamera;
+using rkv::RobotScene;
 
 namespace robot_kinematic_viewer_internal {
 
@@ -425,6 +427,10 @@ int main(int argc, char** argv) {
             specs = {"scene", "ik", "playback", "safety", "joint", "tf", "obstacle", "planner", "teach", "point_cloud"};
         }
         panel_registry.LoadFromConfig(specs, panel_search_dirs);
+        if (panel_registry.Count() < static_cast<int>(specs.size())) {
+            std::cerr << "[robot_kinematic_viewer] sidebar panels: loaded " << panel_registry.Count() << "/"
+                      << specs.size() << ". Missing plugins are usually stale librkv_panel_*.so — run a full build.\n";
+        }
     }
     {
         const int preferred = panel_registry.IndexOf("joint");
@@ -515,6 +521,7 @@ int main(int argc, char** argv) {
         }
     }
     CollisionMonitorState collision_state;
+    CollisionMonitorResult collision_result;
     TrajectoryPlayer trajectory_player;
     CollisionMonitor collision_monitor;
     LinkKinematicsAnalyzer link_kinematics_analyzer;
@@ -522,6 +529,7 @@ int main(int argc, char** argv) {
     kinematic_viewer::KinematicIkController ik_controller(&ik_state);
     std::string last_playback_io_status;
     bool initial_pose_auto_apply_pending = cfg.initial_pose.enable && cfg.initial_pose.auto_apply_on_start;
+    int collision_refresh_tick             = 0;
     {
         ik_state.solve_mode = cfg.ik.mode;
         std::transform(ik_state.solve_mode.begin(), ik_state.solve_mode.end(), ik_state.solve_mode.begin(),
@@ -594,7 +602,7 @@ int main(int argc, char** argv) {
         float panel_min      = 280.0f;
         float panel_max      = std::max(panel_min, static_cast<float>(fb_w) - 320.0f);
         ui_state.panel_width = std::clamp(ui_state.panel_width, panel_min, panel_max);
-        int panel_w          = static_cast<int>(ui_state.panel_width);
+        const int panel_w    = ui_state.sidebar_hidden ? 0 : static_cast<int>(ui_state.panel_width);
         int viewport_w       = std::max(1, fb_w - panel_w);
         int viewport_h       = std::max(1, fb_h);
 
@@ -606,6 +614,18 @@ int main(int argc, char** argv) {
         const bool sidebar_hotkeys_enabled = !ImGui::GetIO().WantTextInput && !ImGui::GetIO().WantCaptureKeyboard;
         ui_state.sidebar_page =
             input_handler.HandleSidebarHotkeys(ui_state.sidebar_page, panel_registry.Count(), sidebar_hotkeys_enabled);
+
+        const auto viewport_hotkeys =
+            input_handler.HandleViewportHotkeys(sidebar_hotkeys_enabled, playback_sm.HasKeyframes());
+        if (viewport_hotkeys.toggled_sidebar) {
+            ui_state.sidebar_hidden = !ui_state.sidebar_hidden;
+            ui_feedback.Push(UiSemanticLevel::Info, ui_state.sidebar_hidden ? "已隐藏侧栏 (H 恢复)" : "已显示侧栏", now_sec);
+        }
+        if (viewport_hotkeys.toggled_playback) {
+            if (playback_sm.TogglePlayPause()) {
+                ui_feedback.Push(UiSemanticLevel::Info, playback_sm.IsPlaying() ? "回放: 播放" : "回放: 暂停", now_sec, 1.2);
+            }
+        }
         if (panel_registry.Count() == 0) {
             ui_state.sidebar_page = 0;
         } else {
@@ -642,12 +662,21 @@ int main(int argc, char** argv) {
         }
         scene.setFixedBaseMode(ui_state.lock_base);
         scene.updateTransforms();
-        CollisionMonitorResult collision_result = collision_monitor.Evaluate(collision_state, scene);
-        if (collision_state.enable) {
+
+        const auto run_collision_monitor = [&]() {
+            if (!collision_state.enable) {
+                return;
+            }
+            collision_result = collision_monitor.Evaluate(collision_state, scene);
             MergeUserObstaclesIntoCollisionResult(ui_state.user_obstacles, scene, collision_state.warning_distance_m,
                                                   collision_state.danger_distance_m, &collision_result);
+            collision_monitor.UpdateStateFromResult(collision_result, &collision_state);
+        };
+
+        if (collision_state.enable &&
+            (scene.isJointPoseDirty() || playback_sm.IsPlaying() || (++collision_refresh_tick % 4 == 0))) {
+            run_collision_monitor();
         }
-        collision_monitor.UpdateStateFromResult(collision_result, &collision_state);
 
         glm::mat4 proj =
             glm::perspective(glm::radians(50.0f), static_cast<float>(viewport_w) / static_cast<float>(viewport_h), 0.05f, 80.0f);
@@ -670,6 +699,7 @@ int main(int argc, char** argv) {
         render_ctx.camera            = &camera;
         render_ctx.planned_path      = &path_planner_ui.preview_waypoints;
         render_ctx.show_planned_path = path_planner_ui.show_preview;
+        render_ctx.demo_visual_mode  = ui_state.demo_visual_mode;
         render_loop.Render(render_ctx);
 
         kinematic_viewer::CaptureFrameForRecorder(&video_recorder, viewport_w, viewport_h);
@@ -934,12 +964,22 @@ int main(int argc, char** argv) {
         input_ctx.imgui_wants_mouse  = ImGui::GetIO().WantCaptureMouse;
         input_handler.UpdateCamera(&camera, input_ctx);
 
-        // Marker hover/pick in viewport (screen-space) — disabled (false branch)
-        if (false && ik_state.selected_chain >= 0 && ik_state.selected_chain < static_cast<int>(ik_state.chains.size()) &&
-            !ImGui::GetIO().WantCaptureMouse) {
-            // This block is disabled. If re-enabled, view/proj matrices need to be recomputed here
-            // since they are no longer kept in the main loop scope after KinematicRenderLoop refactoring.
+        {
+            kinematic_viewer::ViewportHudContext hud_ctx;
+            hud_ctx.viewport_w        = viewport_w;
+            hud_ctx.viewport_h        = viewport_h;
+            hud_ctx.ui_state          = &ui_state;
+            hud_ctx.playback_state    = &playback_state;
+            hud_ctx.playback_sm       = &playback_sm;
+            hud_ctx.playback_player   = &trajectory_player;
+            hud_ctx.scene             = &scene;
+            hud_ctx.collision_state   = &collision_state;
+            hud_ctx.collision_result  = &collision_result;
+            hud_ctx.video_recorder    = &video_recorder;
+            kinematic_viewer::RenderViewportHud(hud_ctx);
         }
+
+        if (panel_w > 0) {
         glViewport(viewport_w, 0, panel_w, fb_h);
         glDisable(GL_DEPTH_TEST);
         ImGui::SetNextWindowPos(ImVec2(static_cast<float>(viewport_w), 0.0f), ImGuiCond_Always);
@@ -1075,7 +1115,8 @@ int main(int argc, char** argv) {
         }
         if (ImGui::CollapsingHeader("操作提示")) {
             ImGui::TextDisabled("视角：左键旋转，中键/Shift+左键平移，右键缩放，滚轮缩放");
-            ImGui::TextDisabled("快捷键 1-9 切换子页；场景页可开启 3D 点选 Link");
+            ImGui::TextDisabled("Space 播放/暂停  ·  H 隐藏/显示侧栏  ·  1-9 切换子页");
+            ImGui::TextDisabled("场景页可开启 3D 点选 Link；演示视觉适合录屏展示");
         }
         ImGui::Separator();
         float avail_w = ImGui::GetContentRegionAvail().x;
@@ -1152,12 +1193,7 @@ int main(int argc, char** argv) {
 
         if (scene.consumeJointPoseDirty()) {
             scene.updateTransforms();
-            if (collision_state.enable) {
-                collision_result = collision_monitor.Evaluate(collision_state, scene);
-                MergeUserObstaclesIntoCollisionResult(ui_state.user_obstacles, scene, collision_state.warning_distance_m,
-                                                      collision_state.danger_distance_m, &collision_result);
-                collision_monitor.UpdateStateFromResult(collision_result, &collision_state);
-            }
+            run_collision_monitor();
         }
 
         if (playback_state.trajectory_io_status != last_playback_io_status) {
@@ -1176,7 +1212,9 @@ int main(int argc, char** argv) {
         }
 
         ImGui::End();
-        ui_feedback.RenderToasts(now_sec);
+        }
+
+        ui_feedback.RenderToasts(now_sec, static_cast<float>(viewport_w) - 14.0f, 14.0f);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

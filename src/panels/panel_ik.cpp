@@ -2,7 +2,7 @@
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
 #include "kinematic_viewer/kinematic_ik_controller.h"
 #include "kinematic_viewer/kinematic_runtime_state.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 extern "C" {
 
@@ -16,7 +16,7 @@ void rkv_panel_render(RkvPanelCtx* ctx) {
         static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
         static_cast<kinematic_viewer::IkState*>(ctx->ik_state),
         static_cast<kinematic_viewer::KinematicIkController*>(ctx->ik_controller),
-        static_cast<teleop_viewer::RobotScene*>(ctx->scene));
+        static_cast<rkv::RobotScene*>(ctx->scene));
 }
 
 }  // extern "C"

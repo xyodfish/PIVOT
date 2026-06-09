@@ -1,7 +1,7 @@
 #pragma once
 
-#include "teleop_viewer/config_types.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/config_types.h"
+#include "rkv/scene.h"
 
 #include <flex_ik.h>
 #include <glm/glm.hpp>
@@ -18,7 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace teleop_viewer {
+namespace rkv {
 
     struct IkChainStatus {
         ViewerIkChainConfig config;
@@ -119,4 +119,4 @@ namespace teleop_viewer {
         bool fullBodyWbcHasFloatingBase_ = false;
     };
 
-}  // namespace teleop_viewer
+}  // namespace rkv

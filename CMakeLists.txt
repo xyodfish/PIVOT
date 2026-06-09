@@ -170,11 +170,14 @@ add_library(rkv_viewer_core SHARED
     src/kinematic_viewer/kinematic_playback_state_machine.cpp
     src/kinematic_viewer/kinematic_playback.cpp
     src/kinematic_viewer/kinematic_collision_monitor.cpp
+    src/kinematic_viewer/kinematic_collision_distance.cpp
     src/kinematic_viewer/kinematic_initial_pose.cpp
     src/kinematic_viewer/kinematic_marker_target_state.cpp
     src/kinematic_viewer/kinematic_sidebar_panels.cpp
     src/kinematic_viewer/kinematic_ui_theme.cpp
     src/kinematic_viewer/kinematic_ui_feedback.cpp
+    src/kinematic_viewer/kinematic_demo_visual.cpp
+    src/kinematic_viewer/kinematic_viewport_hud.cpp
     src/kinematic_viewer/kinematic_marker_utils.cpp
     src/kinematic_viewer/kinematic_shader_utils.cpp
     src/kinematic_viewer/kinematic_line_renderer.cpp
@@ -189,8 +192,8 @@ add_library(rkv_viewer_core SHARED
     src/kinematic_viewer/kinematic_teach_panel.cpp
     src/kinematic_viewer/kinematic_point_cloud.cpp
     src/kinematic_viewer/rkv_panel_registry.cpp
-    src/teleop_viewer/ik_solver.cpp
-    src/teleop_viewer/scene.cpp
+    src/rkv/ik_solver.cpp
+    src/rkv/scene.cpp
 )
 target_include_directories(rkv_viewer_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -247,16 +250,27 @@ macro(rkv_add_panel id src)
         INSTALL_RPATH "$ORIGIN")
 endmacro()
 
+set(RKV_PANEL_TARGETS "")
 rkv_add_panel(scene       src/panels/panel_scene.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_scene)
 rkv_add_panel(ik          src/panels/panel_ik.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_ik)
 rkv_add_panel(playback    src/panels/panel_playback.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_playback)
 rkv_add_panel(safety      src/panels/panel_safety.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_safety)
 rkv_add_panel(joint       src/panels/panel_joint.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_joint)
 rkv_add_panel(tf          src/panels/panel_tf.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_tf)
 rkv_add_panel(obstacle    src/panels/panel_obstacle.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_obstacle)
 rkv_add_panel(planner     src/panels/panel_planner.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_planner)
 rkv_add_panel(teach       src/panels/panel_teach.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_teach)
 rkv_add_panel(point_cloud src/panels/panel_point_cloud.cpp)
+list(APPEND RKV_PANEL_TARGETS rkv_panel_point_cloud)
 
 # ---------------------------------------------------------------------------
 # Main executable — only app glue + glad; everything else is in rkv_viewer_core
@@ -269,9 +283,16 @@ add_executable(robot_kinematic_viewer
 )
 
 target_link_libraries(robot_kinematic_viewer PRIVATE rkv_viewer_core)
+add_dependencies(robot_kinematic_viewer ${RKV_PANEL_TARGETS})
 set_target_properties(robot_kinematic_viewer PROPERTIES
     BUILD_RPATH "${PROJECT_SOURCE_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib"
     INSTALL_RPATH "$ORIGIN/../lib")
+
+add_executable(collision_distance_test tests/collision_distance_test.cpp deps/glad/glad.c)
+target_link_libraries(collision_distance_test PRIVATE rkv_viewer_core glfw)
+set_target_properties(collision_distance_test PROPERTIES
+    BUILD_RPATH "${PROJECT_SOURCE_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib"
+    RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
 
 if(RKV_PCL_FOUND)
     find_library(RKV_LIB_GOMP NAMES gomp libgomp PATHS "${ROOT_DEVEL_ARCH_PATH}/lib" NO_DEFAULT_PATH)

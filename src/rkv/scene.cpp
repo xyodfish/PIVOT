@@ -1,7 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -23,7 +23,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace teleop_viewer {
+namespace rkv {
     namespace {
 
         struct Vertex {
@@ -78,6 +78,9 @@ namespace teleop_viewer {
             bool hasValidTexture() const { return !textures.empty() && textures[0].id != 0; }
 
             void draw(GLuint shader, const glm::vec3* override_color = nullptr, bool force_color_only = false) {
+                if (!vao) {
+                    setup();
+                }
                 glBindVertexArray(vao);
                 const glm::vec3 color = override_color ? *override_color : diffuse_color;
                 glUniform3f(glGetUniformLocation(shader, "diffuseColor"), color.r, color.g, color.b);
@@ -100,7 +103,7 @@ namespace teleop_viewer {
             std::vector<Mesh> meshes;
             std::string directory;
 
-            void loadAssimp(const std::string& path) {
+            void loadAssimp(const std::string& path, bool geometry_only = false) {
                 Assimp::Importer importer;
                 const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
 
@@ -114,22 +117,22 @@ namespace teleop_viewer {
                     directory = path.substr(0, last_slash);
                 }
 
-                processNode(scene->mRootNode, scene);
+                processNode(scene->mRootNode, scene, geometry_only);
             }
 
            private:
-            void processNode(aiNode* node, const aiScene* scene) {
+            void processNode(aiNode* node, const aiScene* scene, bool geometry_only) {
                 for (unsigned int i = 0; i < node->mNumMeshes; i++) {
                     aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-                    meshes.push_back(processMesh(mesh, scene));
+                    meshes.push_back(processMesh(mesh, scene, geometry_only));
                 }
 
                 for (unsigned int i = 0; i < node->mNumChildren; i++) {
-                    processNode(node->mChildren[i], scene);
+                    processNode(node->mChildren[i], scene, geometry_only);
                 }
             }
 
-            Mesh processMesh(aiMesh* mesh, const aiScene* scene) {
+            Mesh processMesh(aiMesh* mesh, const aiScene* scene, bool geometry_only) {
                 Mesh m;
 
                 for (unsigned int i = 0; i < mesh->mNumVertices; i++) {
@@ -158,7 +161,7 @@ namespace teleop_viewer {
                     }
                 }
 
-                if (mesh->mMaterialIndex >= 0) {
+                if (!geometry_only && mesh->mMaterialIndex >= 0) {
                     aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
                     aiColor3D color(1.0f, 1.0f, 1.0f);
                     material->Get(AI_MATKEY_COLOR_DIFFUSE, color);
@@ -181,7 +184,9 @@ namespace teleop_viewer {
                     }
                 }
 
-                m.setup();
+                if (!geometry_only) {
+                    m.setup();
+                }
                 return m;
             }
 
@@ -236,6 +241,10 @@ namespace teleop_viewer {
             glm::mat4 local_transform = glm::mat4(1.0f);
             glm::vec3 local_center    = glm::vec3(0.0f);
             float radius_m            = 0.0f;
+            bool has_model_aabb       = false;
+            glm::vec3 model_aabb_min  = glm::vec3(0.0f);
+            glm::vec3 model_aabb_max  = glm::vec3(0.0f);
+            std::vector<glm::vec3> model_triangles;
         };
 
         enum class CollisionGeomKind { Sphere, Box, Cylinder, Mesh };
@@ -452,6 +461,8 @@ namespace teleop_viewer {
         std::unordered_map<std::string, LinkInertialLocal> link_inertials;
         std::vector<PickMeshTriangle> pick_mesh_triangles;
         bool pick_mesh_cache_dirty = true;
+        bool collision_proxies_cache_valid = false;
+        mutable std::vector<LinkCollisionProxy> cached_collision_proxies;
         bool joint_pose_dirty      = false;
         std::unordered_map<std::string, std::string> link_to_parent_joint;
         std::unordered_map<std::string, JointDetailInfo> joint_details;
@@ -477,8 +488,9 @@ namespace teleop_viewer {
             return transform;
         }
 
-        bool computeBoundingSphereFromModel(const Model& model, glm::vec3* out_center, float* out_radius) const {
-            if (out_center == nullptr || out_radius == nullptr) {
+        bool computeBoundsFromModel(const Model& model, glm::vec3* out_min, glm::vec3* out_max, glm::vec3* out_center = nullptr,
+                                    float* out_radius = nullptr) const {
+            if (out_min == nullptr || out_max == nullptr) {
                 return false;
             }
             glm::vec3 min_v(1e9f);
@@ -492,21 +504,169 @@ namespace teleop_viewer {
                 }
             }
             if (!has_vertex) {
+                *out_min = glm::vec3(0.0f);
+                *out_max = glm::vec3(0.0f);
+                if (out_center != nullptr) {
+                    *out_center = glm::vec3(0.0f);
+                }
+                if (out_radius != nullptr) {
+                    *out_radius = 0.0f;
+                }
+                return false;
+            }
+
+            *out_min = min_v;
+            *out_max = max_v;
+            if (out_center != nullptr || out_radius != nullptr) {
+                const glm::vec3 center = 0.5f * (min_v + max_v);
+                if (out_center != nullptr) {
+                    *out_center = center;
+                }
+                if (out_radius != nullptr) {
+                    float radius = 0.0f;
+                    for (const auto& mesh : model.meshes) {
+                        for (const auto& vertex : mesh.vertices) {
+                            radius = std::max(radius, glm::length(vertex.position - center));
+                        }
+                    }
+                    *out_radius = radius;
+                }
+            }
+            return true;
+        }
+
+        bool computeBoundingSphereFromModel(const Model& model, glm::vec3* out_center, float* out_radius) const {
+            if (out_center == nullptr || out_radius == nullptr) {
+                return false;
+            }
+            glm::vec3 min_v;
+            glm::vec3 max_v;
+            if (!computeBoundsFromModel(model, &min_v, &max_v, out_center, out_radius)) {
                 *out_center = glm::vec3(0.0f);
                 *out_radius = 0.0f;
                 return false;
             }
+            return true;
+        }
 
-            const glm::vec3 center = 0.5f * (min_v + max_v);
-            float radius           = 0.0f;
-            for (const auto& mesh : model.meshes) {
-                for (const auto& vertex : mesh.vertices) {
-                    radius = std::max(radius, glm::length(vertex.position - center));
+        void ExpandWorldAabbFromModelAabb(const glm::mat4& world_from_model, const glm::vec3& model_min, const glm::vec3& model_max,
+                                          glm::vec3* world_min, glm::vec3* world_max) const {
+            if (world_min == nullptr || world_max == nullptr) {
+                return;
+            }
+            *world_min = glm::vec3(1e9f);
+            *world_max = glm::vec3(-1e9f);
+            for (int ix = 0; ix <= 1; ++ix) {
+                for (int iy = 0; iy <= 1; ++iy) {
+                    for (int iz = 0; iz <= 1; ++iz) {
+                        const glm::vec3 model_corner(ix ? model_max.x : model_min.x, iy ? model_max.y : model_min.y,
+                                                     iz ? model_max.z : model_min.z);
+                        const glm::vec3 world_corner = glm::vec3(world_from_model * glm::vec4(model_corner, 1.0f));
+                        *world_min                   = glm::min(*world_min, world_corner);
+                        *world_max                   = glm::max(*world_max, world_corner);
+                    }
                 }
             }
-            *out_center = center;
-            *out_radius = radius;
-            return true;
+        }
+
+        void AppendModelTriangles(const Model& model, std::vector<glm::vec3>* out_triangles) const {
+            if (out_triangles == nullptr) {
+                return;
+            }
+            for (const auto& mesh : model.meshes) {
+                for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+                    out_triangles->push_back(mesh.vertices[mesh.indices[i]].position);
+                    out_triangles->push_back(mesh.vertices[mesh.indices[i + 1]].position);
+                    out_triangles->push_back(mesh.vertices[mesh.indices[i + 2]].position);
+                }
+            }
+        }
+
+        void FillLinkCollisionProxyAabb(const glm::mat4& world_from_model, const LocalCollisionProxy& local_proxy,
+                                        LinkCollisionProxy* proxy) const {
+            if (proxy == nullptr || !local_proxy.has_model_aabb) {
+                return;
+            }
+            ExpandWorldAabbFromModelAabb(world_from_model, local_proxy.model_aabb_min, local_proxy.model_aabb_max,
+                                         &proxy->world_aabb_min, &proxy->world_aabb_max);
+            proxy->has_world_aabb = true;
+        }
+
+        void AppendWorldCollisionTrianglesForLink(const std::string& link_name, std::vector<glm::vec3>* out_triangles) const {
+            if (out_triangles == nullptr) {
+                return;
+            }
+            for (const auto& local_proxy : collision_proxies_local) {
+                if (local_proxy.link_name != link_name || local_proxy.model_triangles.empty()) {
+                    continue;
+                }
+                const auto link_it = transforms.find(local_proxy.link_name);
+                if (link_it == transforms.end()) {
+                    continue;
+                }
+                const glm::mat4 world_from_model = link_it->second * local_proxy.local_transform;
+                for (const glm::vec3& vertex : local_proxy.model_triangles) {
+                    out_triangles->push_back(glm::vec3(world_from_model * glm::vec4(vertex, 1.0f)));
+                }
+            }
+        }
+
+        std::vector<LinkCollisionProxy> buildLinkCollisionProxies() const {
+            std::vector<LinkCollisionProxy> proxies;
+            if (!collision_proxies_local.empty()) {
+                proxies.reserve(collision_proxies_local.size());
+                for (const auto& local_proxy : collision_proxies_local) {
+                    if (local_proxy.radius_m <= 1e-6f) {
+                        continue;
+                    }
+                    const auto link_it = transforms.find(local_proxy.link_name);
+                    if (link_it == transforms.end()) {
+                        continue;
+                    }
+
+                    const glm::mat4 world_from_model = link_it->second * local_proxy.local_transform;
+                    LinkCollisionProxy proxy;
+                    proxy.link_name    = local_proxy.link_name;
+                    proxy.visual_name  = local_proxy.collision_name;
+                    proxy.world_center = glm::vec3(world_from_model * glm::vec4(local_proxy.local_center, 1.0f));
+                    proxy.radius_m     = local_proxy.radius_m;
+                    FillLinkCollisionProxyAabb(world_from_model, local_proxy, &proxy);
+                    proxies.push_back(std::move(proxy));
+                }
+                return proxies;
+            }
+
+            proxies.reserve(visuals.size());
+            for (const auto& [visual_name, visual] : visuals) {
+                if (!visual.loaded || visual.local_bounding_radius <= 1e-6f) {
+                    continue;
+                }
+
+                const auto link_it = transforms.find(visual.parent_link_name);
+                if (link_it == transforms.end()) {
+                    continue;
+                }
+
+                glm::mat4 proxy_transform    = link_it->second * visual.local_transform;
+                proxy_transform              = proxy_transform * glm::scale(glm::mat4(1.0f), visual.scale);
+                const glm::vec3 world_center = glm::vec3(proxy_transform * glm::vec4(visual.local_bounding_center, 1.0f));
+                const float scale_factor =
+                    std::max(std::max(std::fabs(visual.scale.x), std::fabs(visual.scale.y)), std::fabs(visual.scale.z));
+
+                LinkCollisionProxy proxy;
+                proxy.link_name    = visual.parent_link_name;
+                proxy.visual_name  = visual_name;
+                proxy.world_center = world_center;
+                proxy.radius_m     = std::max(0.0f, visual.local_bounding_radius * scale_factor);
+                const glm::vec3 local_extent = glm::vec3(proxy.radius_m);
+                LocalCollisionProxy visual_aabb;
+                visual_aabb.has_model_aabb = proxy.radius_m > 1e-6f;
+                visual_aabb.model_aabb_min = visual.local_bounding_center - local_extent;
+                visual_aabb.model_aabb_max = visual.local_bounding_center + local_extent;
+                FillLinkCollisionProxyAabb(proxy_transform, visual_aabb, &proxy);
+                proxies.push_back(std::move(proxy));
+            }
+            return proxies;
         }
 
         void computeBoundingSphere(LinkVisual* visual) const {
@@ -560,17 +720,26 @@ namespace teleop_viewer {
             out_proxy->local_transform = poseToTransform(collision->origin);
             out_proxy->local_center    = glm::vec3(0.0f);
             out_proxy->radius_m        = 0.0f;
+            out_proxy->has_model_aabb  = false;
 
             if (collision->geometry->type == urdf::Geometry::SPHERE) {
                 auto sphere         = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
                 out_proxy->radius_m = static_cast<float>(sphere->radius);
+                const float radius  = out_proxy->radius_m;
+                out_proxy->model_aabb_min = glm::vec3(-radius);
+                out_proxy->model_aabb_max = glm::vec3(radius);
+                out_proxy->has_model_aabb = radius > 1e-6f;
                 return out_proxy->radius_m > 1e-6f;
             }
 
             if (collision->geometry->type == urdf::Geometry::BOX) {
                 auto box = std::static_pointer_cast<urdf::Box>(collision->geometry);
                 const glm::vec3 dims(static_cast<float>(box->dim.x), static_cast<float>(box->dim.y), static_cast<float>(box->dim.z));
-                out_proxy->radius_m = 0.5f * glm::length(dims);
+                out_proxy->radius_m       = 0.5f * glm::length(dims);
+                const glm::vec3 half_dims = 0.5f * dims;
+                out_proxy->model_aabb_min = -half_dims;
+                out_proxy->model_aabb_max = half_dims;
+                out_proxy->has_model_aabb = out_proxy->radius_m > 1e-6f;
                 return out_proxy->radius_m > 1e-6f;
             }
 
@@ -579,6 +748,9 @@ namespace teleop_viewer {
                 const float radius      = static_cast<float>(cylinder->radius);
                 const float half_length = static_cast<float>(0.5 * cylinder->length);
                 out_proxy->radius_m     = std::sqrt(radius * radius + half_length * half_length);
+                out_proxy->model_aabb_min = glm::vec3(-radius, -radius, -half_length);
+                out_proxy->model_aabb_max = glm::vec3(radius, radius, half_length);
+                out_proxy->has_model_aabb = out_proxy->radius_m > 1e-6f;
                 return out_proxy->radius_m > 1e-6f;
             }
 
@@ -589,18 +761,21 @@ namespace teleop_viewer {
                     return false;
                 }
                 Model collision_model;
-                collision_model.loadAssimp(mesh_file);
+                collision_model.loadAssimp(mesh_file, true);
                 glm::vec3 mesh_center(0.0f);
                 float mesh_radius = 0.0f;
-                if (!computeBoundingSphereFromModel(collision_model, &mesh_center, &mesh_radius)) {
+                if (!computeBoundsFromModel(collision_model, &out_proxy->model_aabb_min, &out_proxy->model_aabb_max, &mesh_center,
+                                            &mesh_radius)) {
                     return false;
                 }
+                AppendModelTriangles(collision_model, &out_proxy->model_triangles);
                 const glm::vec3 mesh_scale(static_cast<float>(mesh->scale.x), static_cast<float>(mesh->scale.y),
                                            static_cast<float>(mesh->scale.z));
                 out_proxy->local_transform = out_proxy->local_transform * glm::scale(glm::mat4(1.0f), mesh_scale);
                 out_proxy->local_center    = mesh_center;
                 const float scale_factor   = std::max(std::max(std::fabs(mesh_scale.x), std::fabs(mesh_scale.y)), std::fabs(mesh_scale.z));
                 out_proxy->radius_m        = std::max(0.0f, mesh_radius * scale_factor);
+                out_proxy->has_model_aabb  = out_proxy->radius_m > 1e-6f;
                 return out_proxy->radius_m > 1e-6f;
             }
 
@@ -836,7 +1011,8 @@ namespace teleop_viewer {
         impl_->link_parent.clear();
         impl_->link_inertials.clear();
         impl_->pick_mesh_triangles.clear();
-        impl_->pick_mesh_cache_dirty = true;
+        impl_->pick_mesh_cache_dirty         = true;
+        impl_->collision_proxies_cache_valid = false;
 
         std::function<void(urdf::LinkConstSharedPtr, const glm::mat4&, const std::string&)> traverse =
             [&](urdf::LinkConstSharedPtr link, const glm::mat4& parent_transform, const std::string& parent_name) {
@@ -1034,7 +1210,8 @@ namespace teleop_viewer {
         };
 
         traverse(impl_->urdf_model->getRoot(), impl_->rootWorldTransform());
-        impl_->pick_mesh_cache_dirty = true;
+        impl_->pick_mesh_cache_dirty         = true;
+        impl_->collision_proxies_cache_valid = false;
     }
 
     void RobotScene::draw(GLuint shader, const SceneDrawStyle& style) {
@@ -1169,6 +1346,10 @@ namespace teleop_viewer {
         return dirty;
     }
 
+    bool RobotScene::isJointPoseDirty() const {
+        return impl_->joint_pose_dirty;
+    }
+
     bool RobotScene::getJointInfo(const std::string& joint_name, JointInfo* out) const {
         if (!out) {
             return false;
@@ -1246,53 +1427,17 @@ namespace teleop_viewer {
     }
 
     std::vector<RobotScene::LinkCollisionProxy> RobotScene::getLinkCollisionProxies() const {
-        std::vector<LinkCollisionProxy> proxies;
-        if (!impl_->collision_proxies_local.empty()) {
-            proxies.reserve(impl_->collision_proxies_local.size());
-            for (const auto& local_proxy : impl_->collision_proxies_local) {
-                if (local_proxy.radius_m <= 1e-6f) {
-                    continue;
-                }
-                const auto link_it = impl_->transforms.find(local_proxy.link_name);
-                if (link_it == impl_->transforms.end()) {
-                    continue;
-                }
-
-                const glm::mat4 world_transform = link_it->second * local_proxy.local_transform;
-                LinkCollisionProxy proxy;
-                proxy.link_name    = local_proxy.link_name;
-                proxy.visual_name  = local_proxy.collision_name;
-                proxy.world_center = glm::vec3(world_transform * glm::vec4(local_proxy.local_center, 1.0f));
-                proxy.radius_m     = local_proxy.radius_m;
-                proxies.push_back(std::move(proxy));
-            }
-            return proxies;
+        if (impl_->collision_proxies_cache_valid) {
+            return impl_->cached_collision_proxies;
         }
 
-        proxies.reserve(impl_->visuals.size());
-        for (const auto& [visual_name, visual] : impl_->visuals) {
-            if (!visual.loaded || visual.local_bounding_radius <= 1e-6f) {
-                continue;
-            }
+        impl_->cached_collision_proxies     = impl_->buildLinkCollisionProxies();
+        impl_->collision_proxies_cache_valid = true;
+        return impl_->cached_collision_proxies;
+    }
 
-            const auto link_it = impl_->transforms.find(visual.parent_link_name);
-            if (link_it == impl_->transforms.end()) {
-                continue;
-            }
-
-            glm::mat4 proxy_transform    = link_it->second * visual.local_transform;
-            proxy_transform              = proxy_transform * glm::scale(glm::mat4(1.0f), visual.scale);
-            const glm::vec3 world_center = glm::vec3(proxy_transform * glm::vec4(visual.local_bounding_center, 1.0f));
-            const float scale_factor = std::max(std::max(std::fabs(visual.scale.x), std::fabs(visual.scale.y)), std::fabs(visual.scale.z));
-
-            LinkCollisionProxy proxy;
-            proxy.link_name    = visual.parent_link_name;
-            proxy.visual_name  = visual_name;
-            proxy.world_center = world_center;
-            proxy.radius_m     = std::max(0.0f, visual.local_bounding_radius * scale_factor);
-            proxies.push_back(std::move(proxy));
-        }
-        return proxies;
+    void RobotScene::appendLinkWorldCollisionTriangles(const std::string& link_name, std::vector<glm::vec3>* out_triangles) const {
+        impl_->AppendWorldCollisionTrianglesForLink(link_name, out_triangles);
     }
 
     bool RobotScene::getLinkWorldTransform(const std::string& link_name, glm::mat4* out_world_transform) const {
@@ -1525,4 +1670,4 @@ namespace teleop_viewer {
         target += (-right * dx + up * dy) * (pan_scale * distance);
     }
 
-}  // namespace teleop_viewer
+}  // namespace rkv

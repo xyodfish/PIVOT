@@ -1,10 +1,10 @@
 #include "kinematic_viewer/kinematic_marker_target_state.h"
 
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 namespace kinematic_viewer {
 
-    bool EnsureMarkerTargetInitialized(IkState* ikState, teleop_viewer::RobotScene* scene, int chainIndex) {
+    bool EnsureMarkerTargetInitialized(IkState* ikState, rkv::RobotScene* scene, int chainIndex) {
         if (ikState == nullptr || scene == nullptr) {
             return false;
         }
@@ -26,7 +26,7 @@ namespace kinematic_viewer {
         return true;
     }
 
-    bool LoadActiveMarkerFromTarget(IkState* ikState, teleop_viewer::RobotScene* scene) {
+    bool LoadActiveMarkerFromTarget(IkState* ikState, rkv::RobotScene* scene) {
         if (ikState == nullptr || scene == nullptr) {
             return false;
         }

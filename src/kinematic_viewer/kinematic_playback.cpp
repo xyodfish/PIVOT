@@ -221,7 +221,7 @@ namespace kinematic_viewer {
     }  // namespace kinematic_playback_internal
 
     void LinearTrajectoryInterpolator::SampleAndApply(const DebugPlaybackState& playbackState, float sampleTimeSec,
-                                                      int* currentSegmentIndex, teleop_viewer::RobotScene* scene) const {
+                                                      int* currentSegmentIndex, rkv::RobotScene* scene) const {
         auto lerpAngleRad = [](float a0, float a1, float alpha) {
             const float delta = std::atan2(std::sin(a1 - a0), std::cos(a1 - a0));
             return a0 + delta * alpha;
@@ -292,8 +292,8 @@ namespace kinematic_viewer {
     }
 
     void TrajectoryPlayer::RecordKeyframe(DebugPlaybackState* playbackState,
-                                          const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                          const teleop_viewer::RobotScene& scene) const {
+                                          const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                          const rkv::RobotScene& scene) const {
         if (playbackState == nullptr) {
             return;
         }
@@ -373,7 +373,7 @@ namespace kinematic_viewer {
         playbackState->play_time = 0.0f;
     }
 
-    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, teleop_viewer::RobotScene* scene, double dtSec) const {
+    void TrajectoryPlayer::AdvanceAndApply(DebugPlaybackState* playbackState, rkv::RobotScene* scene, double dtSec) const {
         if (playbackState == nullptr || scene == nullptr || !interpolator_) {
             return;
         }
@@ -400,7 +400,7 @@ namespace kinematic_viewer {
         interpolator_->SampleAndApply(*playbackState, playbackState->play_time, &playbackState->current_segment_index, scene);
     }
 
-    void TrajectoryPlayer::SampleAtCurrentTime(const DebugPlaybackState& playbackState, teleop_viewer::RobotScene* scene) const {
+    void TrajectoryPlayer::SampleAtCurrentTime(const DebugPlaybackState& playbackState, rkv::RobotScene* scene) const {
         if (scene == nullptr || !interpolator_ || playbackState.keyframes.empty()) {
             return;
         }
@@ -655,8 +655,8 @@ namespace kinematic_viewer {
     }
 
     void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState,
-                                            const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                            const teleop_viewer::RobotScene& scene) {
+                                            const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                            const rkv::RobotScene& scene) {
         if (playbackState == nullptr) {
             return;
         }
@@ -666,7 +666,7 @@ namespace kinematic_viewer {
         playbackState->selected_keyframe_index = -1;
         playbackState->current_segment_index   = -1;
 
-        std::vector<teleop_viewer::RobotScene::JointInfo> revoluteJoints;
+        std::vector<rkv::RobotScene::JointInfo> revoluteJoints;
         revoluteJoints.reserve(joints.size());
         for (const auto& joint : joints) {
             if (joint.revolute) {
@@ -715,7 +715,7 @@ namespace kinematic_viewer {
     }
 
     bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
-                                      const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, std::string* errorMessage) {
+                                      const std::vector<rkv::RobotScene::JointInfo>& joints, std::string* errorMessage) {
         std::unordered_set<std::string> sceneJointNames;
         for (const auto& joint : joints) {
             sceneJointNames.insert(joint.name);
@@ -776,8 +776,8 @@ namespace kinematic_viewer {
     }
 
     bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
-                                 const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                 teleop_viewer::RobotScene* scene) {
+                                 const std::vector<rkv::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                 rkv::RobotScene* scene) {
         if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || index < 0 ||
             index >= static_cast<int>(playbackState->trajectory_files.size())) {
             return false;
@@ -819,8 +819,8 @@ namespace kinematic_viewer {
         return true;
     }
 
-    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                      TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene,
+    void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                      TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene,
                                       PlaybackStateMachine* playback_sm) {
         if (playbackState == nullptr || playbackState->pending_trajectory_load_index < 0) {
             return;
@@ -852,8 +852,8 @@ namespace kinematic_viewer {
         playbackState->loop                         = playbackState->trajectory_sequence_saved_loop;
     }
 
-    void StartTrajectorySequence(DebugPlaybackState* playbackState, const std::vector<teleop_viewer::RobotScene::JointInfo>& joints,
-                                 TrajectoryPlayer* playbackPlayer, teleop_viewer::RobotScene* scene, PlaybackStateMachine* playback_sm) {
+    void StartTrajectorySequence(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                 TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene, PlaybackStateMachine* playback_sm) {
         if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || playback_sm == nullptr) {
             return;
         }
@@ -891,8 +891,8 @@ namespace kinematic_viewer {
     }
 
     void TickTrajectorySequence(DebugPlaybackState* playbackState, PlaybackStateMachine* playback_sm, bool was_playing_last_frame,
-                                const std::vector<teleop_viewer::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                teleop_viewer::RobotScene* scene) {
+                                const std::vector<rkv::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
+                                rkv::RobotScene* scene) {
         if (playbackState == nullptr || playback_sm == nullptr || playbackPlayer == nullptr || scene == nullptr ||
             !playbackState->trajectory_sequence_active || !was_playing_last_frame || playback_sm->IsPlaying() || playback_sm->IsPaused()) {
             return;

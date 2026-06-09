@@ -1,6 +1,6 @@
 #pragma once
 
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <pinocchio/multibody/data.hpp>
 #include <pinocchio/multibody/model.hpp>
@@ -20,7 +20,7 @@ namespace kinematic_viewer {
     // Pinocchio-backed metrics for the selected link frame (lazy URDF model cache).
     class LinkKinematicsAnalyzer {
        public:
-        bool compute(const teleop_viewer::RobotScene& scene, const std::string& link_name, LinkKinematicsMetrics* out);
+        bool compute(const rkv::RobotScene& scene, const std::string& link_name, LinkKinematicsMetrics* out);
 
        private:
         bool RebuildModelIfNeeded(const std::string& urdf_path);

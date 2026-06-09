@@ -30,7 +30,7 @@ namespace kinematic_viewer {
         return true;
     }
 
-    bool KinematicIkController::EnsureMarkerTargetInitialized(teleop_viewer::RobotScene* scene, int chain_index) {
+    bool KinematicIkController::EnsureMarkerTargetInitialized(rkv::RobotScene* scene, int chain_index) {
         if (!ik_state_ || !scene || chain_index < 0 || chain_index >= static_cast<int>(ik_state_->marker_targets.size())) {
             return false;
         }
@@ -49,7 +49,7 @@ namespace kinematic_viewer {
         return false;
     }
 
-    bool KinematicIkController::LoadActiveMarkerFromTarget(teleop_viewer::RobotScene* scene) {
+    bool KinematicIkController::LoadActiveMarkerFromTarget(rkv::RobotScene* scene) {
         if (!ik_state_ || !scene || ik_state_->selected_chain < 0 ||
             ik_state_->selected_chain >= static_cast<int>(ik_state_->marker_targets.size())) {
             return false;
@@ -81,7 +81,7 @@ namespace kinematic_viewer {
         target.initialized = true;
     }
 
-    bool KinematicIkController::ApplyIkForActiveChain(teleop_viewer::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
+    bool KinematicIkController::ApplyIkForActiveChain(rkv::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
                                                       bool prefer_position_only_target) {
         if (!ik_state_ || !scene || ik_state_->selected_chain < 0 ||
             ik_state_->selected_chain >= static_cast<int>(ik_state_->chains.size())) {
@@ -140,7 +140,7 @@ namespace kinematic_viewer {
                 }
             }
 
-            teleop_viewer::IkSolveStats stats;
+            rkv::IkSolveStats stats;
             const int solve_iters = fast_mode ? 1 : std::max(1, ik_state_->full_body_iterations);
             if (ik_state_->solver.solveFullBody(scene, targets_world, solve_iters, ik_state_->selected_chain, fast_mode,
                                                 prefer_position_only_target, &stats, &ik_state_->last_status)) {
@@ -152,7 +152,7 @@ namespace kinematic_viewer {
         return ik_state_->solver.solveSingleChain(scene, ik_state_->selected_chain, active_target_world, &ik_state_->last_status);
     }
 
-    bool KinematicIkController::RefineActiveChainToMarker(teleop_viewer::RobotScene* scene) {
+    bool KinematicIkController::RefineActiveChainToMarker(rkv::RobotScene* scene) {
         if (!ik_state_ || !scene || ik_state_->selected_chain < 0 ||
             ik_state_->selected_chain >= static_cast<int>(ik_state_->chains.size())) {
             return false;
@@ -184,7 +184,7 @@ namespace kinematic_viewer {
         return false;
     }
 
-    float KinematicIkController::ActiveChainPositionErrorMmToMarker(teleop_viewer::RobotScene* scene) const {
+    float KinematicIkController::ActiveChainPositionErrorMmToMarker(rkv::RobotScene* scene) const {
         if (!ik_state_ || !scene || ik_state_->selected_chain < 0 ||
             ik_state_->selected_chain >= static_cast<int>(ik_state_->chains.size())) {
             return 0.0f;
@@ -198,7 +198,7 @@ namespace kinematic_viewer {
         return glm::length(marker_pos - tip_pos) * 1000.0f;
     }
 
-    void KinematicIkController::ApplyExternalTarget(teleop_viewer::RobotScene* scene) {
+    void KinematicIkController::ApplyExternalTarget(rkv::RobotScene* scene) {
         if (!ik_state_ || !scene || !ik_state_->use_external_target || !ik_state_->external_target_dirty || ik_state_->dragging_marker) {
             return;
         }

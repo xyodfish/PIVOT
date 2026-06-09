@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kinematic_viewer/kinematic_obstacle_state.h"
-#include "teleop_viewer/ik_solver.h"
+#include "rkv/ik_solver.h"
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
@@ -11,9 +11,6 @@
 #include <vector>
 
 namespace kinematic_viewer {
-
-    using TeleopIkChainStatus = teleop_viewer::IkChainStatus;
-    using TeleopIkSolver      = teleop_viewer::IkSolver;
 
     struct ViewerState {
         struct JointInputGroup {
@@ -65,12 +62,23 @@ namespace kinematic_viewer {
         bool scene_panel_active           = false;
         UserObstacleState user_obstacles;
 
-        // Video recording state
         bool is_recording           = false;
         int record_format           = 0;  // 0=MP4, 1=GIF
         int record_fps              = 30;
         char record_output_dir[512] = "";
         char record_filename[256]   = "";  // 空则自动生成
+
+        // Presentation / viewport UX
+        bool sidebar_hidden    = false;
+        bool demo_visual_mode  = false;
+        bool show_grid         = true;
+        bool demo_visual_saved = false;
+        bool saved_show_axes = true;
+        bool saved_show_world_axes = true;
+        bool saved_show_collision_bodies = false;
+        bool saved_show_com = false;
+        bool saved_show_grid = true;
+        bool saved_enable_link_hover_highlight = false;
     };
 
     struct IkState {
@@ -80,8 +88,8 @@ namespace kinematic_viewer {
             glm::vec3 rpy_deg = glm::vec3(0.0f);
         };
 
-        TeleopIkSolver solver;
-        std::vector<TeleopIkChainStatus> chains;
+        rkv::IkSolver solver;
+        std::vector<rkv::IkChainStatus> chains;
         std::vector<MarkerTarget> marker_targets;
         std::string solve_mode        = "single_chain";  // single_chain | full_body
         std::string full_body_backend = "flex_ik";       // flex_ik | wbc_chain_ik
@@ -128,7 +136,7 @@ namespace kinematic_viewer {
         bool external_target_received        = false;
         bool external_target_dirty           = false;
         bool external_target_position_only   = true;
-        std::string external_target_topic    = "/teleop_gui/ik_target_pose";
+        std::string external_target_topic    = "/rkv/ik_target_pose";
         std::string external_target_expected_frame;
         std::string external_target_last_frame;
         glm::vec3 external_target_pos        = glm::vec3(0.0f);

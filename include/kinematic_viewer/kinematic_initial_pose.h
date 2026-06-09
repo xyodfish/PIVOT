@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kinematic_viewer/kinematic_viewer_config.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <string>
 
@@ -18,6 +18,6 @@ namespace kinematic_viewer {
         std::string detail;
     };
 
-    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, teleop_viewer::RobotScene* scene);
+    InitialPoseApplyResult ApplyConfiguredInitialPose(const KinematicInitialPoseConfig& config, rkv::RobotScene* scene);
 
 }  // namespace kinematic_viewer

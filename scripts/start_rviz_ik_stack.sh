@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
 REPO_DIR=$(cd "$SCRIPT_DIR/.."; pwd)
 
-MARKER_TOPIC="/teleop_gui/ik_target_pose"
+MARKER_TOPIC="/rkv/ik_target_pose"
 MARKER_FRAME="world"
 RVIZ_FIXED_FRAME="map"
 VIEWER_BIN="${VIEWER_BIN:-$REPO_DIR/bin/robot_kinematic_viewer}"
@@ -26,7 +26,7 @@ Usage: start_rviz_ik_stack.sh [options]
 本脚本位于 robot_kinematic_viewer 仓库的 scripts/ 目录。
 
 Options:
-  --topic <name>             Marker PoseStamped topic (default: /teleop_gui/ik_target_pose)
+  --topic <name>             Marker PoseStamped topic (default: /rkv/ik_target_pose)
   --marker-frame <frame>     Marker frame_id (default: world)
   --fixed-frame <frame>      RViz fixed frame (default: map)
   --viewer-bin <path>        robot_kinematic_viewer executable path

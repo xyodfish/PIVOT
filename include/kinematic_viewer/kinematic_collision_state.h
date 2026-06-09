@@ -7,7 +7,7 @@
 namespace kinematic_viewer {
 
     struct CollisionMonitorState {
-        bool enable                 = true;
+        bool enable                 = false;
         bool ignore_same_link       = true;
         bool ignore_parent_child    = true;
         bool show_closest_pair_line = true;

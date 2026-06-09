@@ -8,7 +8,7 @@
 #include "kinematic_viewer/kinematic_runtime_state.h"
 #include "kinematic_viewer/kinematic_point_cloud.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
-#include "teleop_viewer/scene.h"
+#include "rkv/scene.h"
 
 #include <glad/glad.h>
 #include <glm/mat4x4.hpp>
@@ -29,7 +29,7 @@ namespace kinematic_viewer {
             GLuint line_shader  = 0;
             GLuint point_shader = 0;
 
-            teleop_viewer::RobotScene* scene                  = nullptr;
+            rkv::RobotScene* scene                  = nullptr;
             const PointCloudUiState* point_cloud              = nullptr;
             const KinematicPointCloudLayer* point_cloud_layer = nullptr;
             const ViewerState* ui_state                       = nullptr;
@@ -38,11 +38,13 @@ namespace kinematic_viewer {
             const CollisionMonitorResult* collision_result    = nullptr;
             const UserObstacleGpuMeshes* obstacle_meshes      = nullptr;
 
-            const teleop_viewer::OrbitCamera* camera = nullptr;
+            const rkv::OrbitCamera* camera = nullptr;
 
             // Path planning preview (optional, may be null)
             const std::vector<CartesianWaypoint>* planned_path = nullptr;
             bool show_planned_path                             = false;
+
+            bool demo_visual_mode = false;
         };
 
         // Persistent GPU resources managed externally (caller owns lifecycle).
@@ -54,7 +56,7 @@ namespace kinematic_viewer {
         void Render(const Context& ctx);
 
        private:
-        void SetupViewportAndClear(int w, int h);
+        void SetupViewportAndClear(const Context& ctx);
         void SetupMeshShaderUniforms(GLuint shader, const glm::mat4& proj, const glm::mat4& view, const glm::vec3& eye);
         void DrawSceneMeshes(GLuint shader, const Context& ctx, const glm::mat4& proj, const glm::mat4& view);
         void DrawObstacles(GLuint shader, const Context& ctx, const glm::mat4& view, const glm::mat4& proj);

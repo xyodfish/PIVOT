@@ -859,6 +859,13 @@ namespace kinematic_viewer {
         if (ImGui::Checkbox("3D点选Link", &uiState->enable_link_click_select) && !uiState->enable_link_click_select) {
             uiState->selected_link.clear();
         }
+        ImGui::Checkbox("3D拖动旋转关节", &uiState->enable_joint_drag_rotation);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("鼠标悬停高亮连杆，左键按住拖动可旋转对应关节（类似 URDF Studio）");
+        }
+        if (uiState->enable_joint_drag_rotation && !uiState->enable_link_hover_highlight) {
+            uiState->enable_link_hover_highlight = true;
+        }
         if (uiState->mobile_base_drag_available) {
             if (ImGui::Checkbox("底盘拖动Gizmo", &uiState->mobile_base_drag_enabled) && uiState->mobile_base_drag_enabled) {
                 uiState->lock_base = false;

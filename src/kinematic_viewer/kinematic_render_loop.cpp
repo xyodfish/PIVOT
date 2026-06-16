@@ -61,10 +61,8 @@ namespace kinematic_viewer {
             style.show_visual_meshes    = ctx.ui_state->show_visual_meshes;
             style.show_collision_bodies = ctx.ui_state->show_collision_bodies;
             style.wireframe_visuals     = ctx.ui_state->show_wireframe;
-            style.hovered_link = ctx.ui_state->hovered_link;
-            if (ctx.ui_state->enable_link_click_select) {
-                style.selected_link = ctx.ui_state->selected_link;
-            }
+            style.hovered_link  = ctx.ui_state->hovered_link;
+            style.selected_link = ctx.ui_state->selected_link;
         }
 
         if (style.show_collision_bodies) {
@@ -276,9 +274,9 @@ namespace kinematic_viewer {
 
         if (ctx.ui_state->enable_link_hover_highlight && !ctx.ui_state->hovered_link.empty() &&
             ctx.ui_state->hovered_link != ctx.ui_state->selected_link) {
-            drawLinkRing(ctx.ui_state->hovered_link, glm::vec3(1.0f, 0.78f, 0.22f));
+            drawLinkRing(ctx.ui_state->hovered_link, glm::vec3(0.35f, 0.82f, 1.0f));
         }
-        if (ctx.ui_state->enable_link_click_select && !ctx.ui_state->selected_link.empty()) {
+        if (!ctx.ui_state->selected_link.empty()) {
             drawLinkRing(ctx.ui_state->selected_link, glm::vec3(0.25f, 0.92f, 1.0f));
         }
     }

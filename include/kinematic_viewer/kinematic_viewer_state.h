@@ -29,6 +29,7 @@ namespace kinematic_viewer {
         bool show_non_revolute              = false;
         bool enable_link_hover_highlight    = false;
         bool enable_link_click_select       = false;
+        bool enable_joint_drag_rotation     = true;
         float axis_length                   = 0.12f;
         float axis_line_width               = 2.0f;
         float world_axis_length             = 0.4f;

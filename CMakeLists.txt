@@ -192,6 +192,7 @@ add_library(rkv_viewer_core SHARED
     src/kinematic_viewer/kinematic_teach.cpp
     src/kinematic_viewer/kinematic_teach_panel.cpp
     src/kinematic_viewer/kinematic_point_cloud.cpp
+    src/kinematic_viewer/kinematic_viewer_session.cpp
     src/kinematic_viewer/rkv_panel_registry.cpp
     src/rkv/ik_solver.cpp
     src/rkv/scene.cpp

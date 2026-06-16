@@ -375,7 +375,7 @@ namespace rkv {
             if (!style.selected_link.empty() && link_name == style.selected_link) {
                 return glm::vec3(0.30f, 0.88f, 1.0f);
             }
-            return glm::vec3(1.0f, 0.72f, 0.18f);
+            return glm::vec3(0.35f, 0.82f, 1.0f);
         }
 
         struct JointState {

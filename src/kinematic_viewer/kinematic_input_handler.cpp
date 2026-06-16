@@ -10,6 +10,8 @@ namespace kinematic_viewer {
 
     namespace {
 
+        constexpr float kJointDragRadPerPixel = 0.012f;
+
         bool ComputeWorldRayFromScreen(float mouse_x, float mouse_y, int viewport_w, int viewport_h, const glm::mat4& view,
                                        const glm::mat4& proj, glm::vec3* out_origin, glm::vec3* out_dir) {
             if (out_origin == nullptr || out_dir == nullptr || viewport_w <= 0 || viewport_h <= 0) {
@@ -76,6 +78,98 @@ namespace kinematic_viewer {
             return true;
         }
 
+        bool ProjectWorldToScreen(const glm::vec3& world, const glm::mat4& view, const glm::mat4& proj, int viewport_w,
+                                  int viewport_h, glm::vec2* out_screen) {
+            if (out_screen == nullptr || viewport_w <= 0 || viewport_h <= 0) {
+                return false;
+            }
+            const glm::vec4 clip = proj * view * glm::vec4(world, 1.0f);
+            if (std::fabs(clip.w) < 1e-8f) {
+                return false;
+            }
+            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            out_screen->x         = (ndc.x * 0.5f + 0.5f) * static_cast<float>(viewport_w);
+            out_screen->y         = (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(viewport_h);
+            return true;
+        }
+
+        bool TryStartJointDragOnLink(rkv::RobotScene* scene, const std::string& link_name, std::string* out_joint_name) {
+            if (scene == nullptr || out_joint_name == nullptr || link_name.empty()) {
+                return false;
+            }
+            std::string joint_name;
+            if (!scene->getParentJointNameForLink(link_name, &joint_name)) {
+                return false;
+            }
+            rkv::RobotScene::JointInfo joint_info;
+            if (!scene->getJointInfo(joint_name, &joint_info) || !joint_info.revolute) {
+                return false;
+            }
+            *out_joint_name = std::move(joint_name);
+            return true;
+        }
+
+        bool PickLinkAtCursor(rkv::RobotScene* scene, const kinematic_viewer::KinematicInputHandler::UpdateContext& ctx,
+                              const glm::mat4& view, const glm::mat4& proj, std::string* out_link_name) {
+            if (scene == nullptr || out_link_name == nullptr) {
+                return false;
+            }
+            if (ctx.hovered_link != nullptr && !ctx.hovered_link->empty()) {
+                *out_link_name = *ctx.hovered_link;
+                return true;
+            }
+            glm::vec3 ray_o(0.0f), ray_d(0.0f);
+            if (!ComputeWorldRayFromScreen(static_cast<float>(ctx.mouse_x), static_cast<float>(ctx.mouse_y), ctx.viewport_w, ctx.viewport_h,
+                                          view, proj, &ray_o, &ray_d)) {
+                return false;
+            }
+            return scene->pickLinkByRay(ray_o, ray_d, out_link_name, nullptr, rkv::RobotScene::LinkPickMode::Fast);
+        }
+
+        bool LookupJointAxis(const rkv::RobotScene* scene, const std::string& joint_name, glm::vec3* out_origin, glm::vec3* out_axis) {
+            if (scene == nullptr || out_origin == nullptr || out_axis == nullptr) {
+                return false;
+            }
+            for (const auto& axis_info : scene->getJointAxisInfos(false)) {
+                if (axis_info.name == joint_name) {
+                    *out_origin = axis_info.world_origin;
+                    *out_axis   = axis_info.world_axis;
+                    return glm::length(*out_axis) > 1e-6f;
+                }
+            }
+            return false;
+        }
+
+        float ComputeJointDragDeltaRad(const rkv::RobotScene* scene, const std::string& joint_name, double mouse_dx, double mouse_dy,
+                                       const glm::mat4& view, const glm::mat4& proj, int viewport_w, int viewport_h) {
+            glm::vec3 origin(0.0f);
+            glm::vec3 axis(0.0f, 0.0f, 1.0f);
+            if (!LookupJointAxis(scene, joint_name, &origin, &axis)) {
+                return static_cast<float>(mouse_dx * kJointDragRadPerPixel);
+            }
+            axis = glm::normalize(axis);
+
+            glm::vec2 origin_screen(0.0f);
+            glm::vec2 axis_screen(0.0f);
+            if (!ProjectWorldToScreen(origin, view, proj, viewport_w, viewport_h, &origin_screen) ||
+                !ProjectWorldToScreen(origin + axis * 0.12f, view, proj, viewport_w, viewport_h, &axis_screen)) {
+                return static_cast<float>(mouse_dx * kJointDragRadPerPixel);
+            }
+
+            glm::vec2 axis_dir = axis_screen - origin_screen;
+            const float axis_len = glm::length(axis_dir);
+            if (axis_len < 1e-4f) {
+                return static_cast<float>(mouse_dx * kJointDragRadPerPixel);
+            }
+            axis_dir /= axis_len;
+            const glm::vec2 tangent(-axis_dir.y, axis_dir.x);
+            float signed_pixels = static_cast<float>(mouse_dx) * tangent.x + static_cast<float>(mouse_dy) * tangent.y;
+            if (std::fabs(signed_pixels) < 1e-4f) {
+                signed_pixels = static_cast<float>(mouse_dx);
+            }
+            return signed_pixels * kJointDragRadPerPixel;
+        }
+
     }  // namespace
 
     bool KinematicInputHandler::IsMouseInViewport(double x, double y, int viewport_w, int viewport_h) const {
@@ -105,7 +199,8 @@ namespace kinematic_viewer {
         const bool any_popup_open = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
         // ImGui has priority: if UI is consuming mouse (or any modal/popup is up), don't move camera.
         bool block_camera = ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.obs_gizmo_using ||
-                            ctx.imgui_wants_mouse || any_popup_open;
+                            ctx.joint_drag_active || (ctx.left_mouse_down && ctx.hovered_link_draggable) || ctx.imgui_wants_mouse ||
+                            any_popup_open;
 
         if (!mouse_in_viewport || block_camera) {
             return result;
@@ -204,6 +299,11 @@ namespace kinematic_viewer {
         }
         link_pick_drag_tracking_ = false;
 
+        if (joint_drag_suppress_link_pick_) {
+            joint_drag_suppress_link_pick_ = false;
+            return result;
+        }
+
         const double drag_dx = ctx.mouse_x - link_pick_press_x_;
         const double drag_dy = ctx.mouse_y - link_pick_press_y_;
         if ((drag_dx * drag_dx + drag_dy * drag_dy) > (kLinkPickDragThresholdPx * kLinkPickDragThresholdPx)) {
@@ -226,7 +326,7 @@ namespace kinematic_viewer {
 
     KinematicInputHandler::LinkPickResult KinematicInputHandler::UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view,
                                                                                  const glm::mat4& proj, rkv::RobotScene* scene,
-                                                                                 double now_sec) {
+                                                                                 double now_sec, bool unthrottled) {
         LinkPickResult result;
         if (scene == nullptr) {
             return result;
@@ -239,7 +339,7 @@ namespace kinematic_viewer {
             return result;
         }
 
-        if (link_hover_last_sec_ >= 0.0 && (now_sec - link_hover_last_sec_) < kLinkHoverIntervalSec) {
+        if (!unthrottled && link_hover_last_sec_ >= 0.0 && (now_sec - link_hover_last_sec_) < kLinkHoverIntervalSec) {
             result.throttle_skip = true;
             return result;
         }
@@ -256,6 +356,85 @@ namespace kinematic_viewer {
             result.picked    = true;
             result.link_name = std::move(hovered_link);
         }
+        return result;
+    }
+
+    KinematicInputHandler::JointDragResult KinematicInputHandler::UpdateJointDrag(const UpdateContext& ctx, const glm::mat4& view,
+                                                                                  const glm::mat4& proj, rkv::RobotScene* scene) {
+        JointDragResult result;
+        if (scene == nullptr || !ctx.enable_joint_drag) {
+            joint_drag_active_   = false;
+            joint_drag_left_prev_ = ctx.left_mouse_down;
+            return result;
+        }
+
+        const bool mouse_in_viewport = IsMouseInViewport(ctx.mouse_x, ctx.mouse_y, ctx.viewport_w, ctx.viewport_h);
+        const bool can_drag          = mouse_in_viewport && !ctx.ik_gizmo_using && !ctx.obs_gizmo_using && !ctx.imgui_wants_mouse;
+        if (!can_drag) {
+            if (!ctx.left_mouse_down) {
+                if (joint_drag_active_) {
+                    result.ended = true;
+                }
+                joint_drag_active_    = false;
+                joint_drag_joint_name_.clear();
+                joint_drag_link_name_.clear();
+            }
+            joint_drag_left_prev_ = ctx.left_mouse_down;
+            return result;
+        }
+
+        const bool left_pressed  = ctx.left_mouse_down && !joint_drag_left_prev_;
+        const bool left_released = !ctx.left_mouse_down && joint_drag_left_prev_;
+        joint_drag_left_prev_    = ctx.left_mouse_down;
+
+        if (left_pressed && !joint_drag_active_) {
+            std::string picked_link;
+            if (PickLinkAtCursor(scene, ctx, view, proj, &picked_link)) {
+                std::string joint_name;
+                if (TryStartJointDragOnLink(scene, picked_link, &joint_name)) {
+                    joint_drag_active_             = true;
+                    joint_drag_suppress_link_pick_ = true;
+                    joint_drag_joint_name_         = std::move(joint_name);
+                    joint_drag_link_name_          = std::move(picked_link);
+                    joint_drag_last_mouse_x_       = ctx.mouse_x;
+                    joint_drag_last_mouse_y_       = ctx.mouse_y;
+                    result.started                 = true;
+                    result.dragging                = true;
+                    result.joint_name              = joint_drag_joint_name_;
+                    result.link_name               = joint_drag_link_name_;
+                }
+            }
+        }
+
+        if (joint_drag_active_ && ctx.left_mouse_down) {
+            const double mouse_dx = ctx.mouse_x - joint_drag_last_mouse_x_;
+            const double mouse_dy = ctx.mouse_y - joint_drag_last_mouse_y_;
+            joint_drag_last_mouse_x_ = ctx.mouse_x;
+            joint_drag_last_mouse_y_ = ctx.mouse_y;
+            if (!result.started && (std::fabs(mouse_dx) > 1e-6 || std::fabs(mouse_dy) > 1e-6)) {
+                rkv::RobotScene::JointInfo joint_info;
+                if (scene->getJointInfo(joint_drag_joint_name_, &joint_info)) {
+                    const float delta_rad =
+                        ComputeJointDragDeltaRad(scene, joint_drag_joint_name_, mouse_dx, mouse_dy, view, proj, ctx.viewport_w,
+                                                 ctx.viewport_h);
+                    const float next_pos = std::clamp(joint_info.position + delta_rad, joint_info.min_angle, joint_info.max_angle);
+                    scene->setJointPositionByName(joint_drag_joint_name_, next_pos);
+                }
+            }
+            result.dragging   = true;
+            result.joint_name = joint_drag_joint_name_;
+            result.link_name  = joint_drag_link_name_;
+        }
+
+        if (left_released && joint_drag_active_) {
+            joint_drag_active_ = false;
+            result.ended       = true;
+            result.joint_name  = joint_drag_joint_name_;
+            result.link_name   = joint_drag_link_name_;
+            joint_drag_joint_name_.clear();
+            joint_drag_link_name_.clear();
+        }
+
         return result;
     }
 
@@ -335,6 +514,10 @@ namespace kinematic_viewer {
 
     void KinematicInputHandler::ResetMouseTracking() {
         first_mouse_ = true;
+        joint_drag_active_             = false;
+        joint_drag_suppress_link_pick_ = false;
+        joint_drag_joint_name_.clear();
+        joint_drag_link_name_.clear();
     }
 
 }  // namespace kinematic_viewer

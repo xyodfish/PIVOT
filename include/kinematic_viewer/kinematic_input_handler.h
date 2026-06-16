@@ -29,6 +29,14 @@ namespace kinematic_viewer {
             std::string link_name;
         };
 
+        struct JointDragResult {
+            bool dragging     = false;
+            bool started      = false;
+            bool ended        = false;
+            std::string joint_name;
+            std::string link_name;
+        };
+
         struct UpdateContext {
             double mouse_x = 0.0;
             double mouse_y = 0.0;
@@ -44,6 +52,11 @@ namespace kinematic_viewer {
             bool obs_gizmo_using    = false;
             bool obs_gizmo_over     = false;
             bool ik_dragging_marker = false;
+            bool joint_drag_active  = false;
+            bool enable_joint_drag  = true;
+            bool hovered_link_draggable = false;
+
+            const std::string* hovered_link = nullptr;
 
             int sidebar_page = 0;
 
@@ -69,9 +82,15 @@ namespace kinematic_viewer {
         LinkPickResult UpdateLinkPick(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
                                       rkv::RobotScene* scene);
 
-        // Raycast link under cursor (fast proxy pick, throttled). throttle_skip when not refreshed.
+        // Raycast link under cursor (fast proxy pick). When unthrottled=true, updates every frame.
         LinkPickResult UpdateLinkHover(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
-                                       rkv::RobotScene* scene, double now_sec);
+                                       rkv::RobotScene* scene, double now_sec, bool unthrottled = false);
+
+        // Left-click a revolute joint's child link, then drag to rotate the joint.
+        JointDragResult UpdateJointDrag(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj,
+                                        rkv::RobotScene* scene);
+
+        bool IsJointDragActive() const { return joint_drag_active_; }
 
         // Handle sidebar page hotkeys (1-9), bounded by visible tab count.
         int HandleSidebarHotkeys(int current_page, int page_count, bool enable_hotkeys);
@@ -101,6 +120,13 @@ namespace kinematic_viewer {
         double link_pick_press_x_                        = 0.0;
         double link_pick_press_y_                        = 0.0;
         double link_hover_last_sec_                      = -1.0;
+        bool joint_drag_active_                          = false;
+        bool joint_drag_suppress_link_pick_              = false;
+        bool joint_drag_left_prev_                       = false;
+        double joint_drag_last_mouse_x_                  = 0.0;
+        double joint_drag_last_mouse_y_                  = 0.0;
+        std::string joint_drag_joint_name_;
+        std::string joint_drag_link_name_;
         float playback_step_accumulator_                 = 0.0f;
         static constexpr double kLinkHoverIntervalSec    = 0.05;
         static constexpr double kLinkPickDragThresholdPx = 6.0;

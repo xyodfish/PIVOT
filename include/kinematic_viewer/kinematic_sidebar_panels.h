@@ -23,7 +23,8 @@ namespace kinematic_viewer {
     void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene,
                           const std::vector<rkv::RobotScene::JointInfo>& joints);
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints);
+                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                             ViewerState* viewerState = nullptr);
     void RenderSafetyPanel(CollisionMonitorState* collisionState, const CollisionMonitorResult& collisionResult);
     void RenderObstaclePanel(ViewerState* uiState);
     void RenderTfPanel(ViewerState* uiState, const std::vector<rkv::RobotScene::LinkTfInfo>& tfs);

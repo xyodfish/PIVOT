@@ -92,6 +92,59 @@ namespace kinematic_viewer {
             return {o.position.x, o.position.y, o.position.z, q.x, q.y, q.z, q.w};
         }
 
+        bool ParseUserObstacleItemFromNode(const YAML::Node& n, std::size_t index, UserObstacleItem* item) {
+            if (item == nullptr) {
+                return false;
+            }
+            *item = UserObstacleItem{};
+            if (n["name"]) {
+                item->name = n["name"].as<std::string>();
+            }
+            if (item->name.empty()) {
+                item->name = "obs_" + std::to_string(index + 1);
+            }
+            if (n["kind"]) {
+                item->kind = ObstacleKindFromName(n["kind"].as<std::string>());
+            } else if (n["type"]) {
+                item->kind = ObstacleKindFromName(n["type"].as<std::string>());
+            }
+            if (n["visible"]) {
+                item->visible = n["visible"].as<bool>();
+            }
+            ReadVec3(n["color"], &item->color);
+            if (!ReadTransformQuat(n["transform"], &item->position, &item->rpy_deg)) {
+                ReadVec3(n["position"], &item->position);
+                ReadVec3(n["rpy_deg"], &item->rpy_deg);
+            }
+            if (item->kind == UserObstacleItem::Kind::Sphere) {
+                if (n["radius"]) {
+                    item->params = glm::vec3(n["radius"].as<float>(), 0.0f, 0.0f);
+                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 1) {
+                    item->params = glm::vec3(n["size"][0].as<float>(), 0.0f, 0.0f);
+                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 1) {
+                    item->params = glm::vec3(n["params"][0].as<float>(), 0.0f, 0.0f);
+                }
+            } else if (item->kind == UserObstacleItem::Kind::Cylinder) {
+                if (n["radius"]) {
+                    item->params.x = n["radius"].as<float>();
+                }
+                if (n["height"]) {
+                    item->params.y = n["height"].as<float>();
+                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 2) {
+                    item->params.y = n["size"][1].as<float>();
+                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 2) {
+                    item->params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), 0.0f);
+                }
+            } else {
+                if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 3) {
+                    item->params = glm::vec3(n["size"][0].as<float>(), n["size"][1].as<float>(), n["size"][2].as<float>());
+                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 3) {
+                    item->params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), n["params"][2].as<float>());
+                }
+            }
+            return true;
+        }
+
         void pushMeshToGpu(const std::vector<VertexPN>& verts, const std::vector<unsigned int>& indices, GLuint* vao, GLuint* vbo,
                            GLuint* ebo, GLsizei* out_index_count) {
             *vao             = 0;
@@ -482,6 +535,58 @@ namespace kinematic_viewer {
         }
     }
 
+    void UpdateUserObstacleNextSerial(UserObstacleState* obstacles) {
+        if (obstacles == nullptr) {
+            return;
+        }
+        int max_serial = 0;
+        for (const auto& item : obstacles->items) {
+            int value = 0;
+            if (std::sscanf(item.name.c_str(), "%*[^0-9]%d", &value) == 1) {
+                max_serial = std::max(max_serial, value);
+            }
+        }
+        obstacles->next_serial = std::max(obstacles->next_serial, max_serial + 1);
+    }
+
+    bool LoadUserObstaclesFromYaml(const std::string& path, std::vector<UserObstacleItem>* out_items, std::string* errorMessage) {
+        if (out_items == nullptr) {
+            if (errorMessage != nullptr) {
+                *errorMessage = "内部错误：输出缓冲为空";
+            }
+            return false;
+        }
+        try {
+            const YAML::Node root      = YAML::LoadFile(path);
+            const YAML::Node obs_nodes = root["obstacles"];
+            if (!obs_nodes || !obs_nodes.IsSequence()) {
+                if (errorMessage != nullptr) {
+                    *errorMessage = "YAML 缺少 obstacles 数组";
+                }
+                return false;
+            }
+            std::vector<UserObstacleItem> loaded;
+            loaded.reserve(obs_nodes.size());
+            for (std::size_t i = 0; i < obs_nodes.size(); ++i) {
+                UserObstacleItem item;
+                if (!ParseUserObstacleItemFromNode(obs_nodes[i], i, &item)) {
+                    if (errorMessage != nullptr) {
+                        *errorMessage = "解析障碍物条目失败";
+                    }
+                    return false;
+                }
+                loaded.push_back(std::move(item));
+            }
+            *out_items = std::move(loaded);
+            return true;
+        } catch (const std::exception& e) {
+            if (errorMessage != nullptr) {
+                *errorMessage = std::string("导入失败: ") + e.what();
+            }
+            return false;
+        }
+    }
+
     void RenderUserObstaclePanel(UserObstacleState* st, bool angle_unit_deg) {
         if (st == nullptr) {
             return;
@@ -507,16 +612,7 @@ namespace kinematic_viewer {
             undo_valid          = true;
             undo_label          = label ? label : "";
         };
-        auto try_update_next_serial = [&]() {
-            int max_serial = 0;
-            for (const auto& it : st->items) {
-                int value = 0;
-                if (std::sscanf(it.name.c_str(), "%*[^0-9]%d", &value) == 1) {
-                    max_serial = std::max(max_serial, value);
-                }
-            }
-            st->next_serial = std::max(st->next_serial, max_serial + 1);
-        };
+        auto try_update_next_serial = [&]() { UpdateUserObstacleNextSerial(st); };
         if (ImGui::Button("撤销上一步") && undo_valid) {
             st->items          = undo_items;
             st->selected_index = undo_selected_index;
@@ -812,68 +908,16 @@ namespace kinematic_viewer {
                 ImGui::EndPopup();
             }
             if (ImGui::Button("导入并替换当前障碍物")) {
-                try {
-                    YAML::Node root      = YAML::LoadFile(import_path);
-                    YAML::Node obs_nodes = root["obstacles"];
-                    if (!obs_nodes || !obs_nodes.IsSequence()) {
-                        import_status = "导入失败: YAML 缺少 obstacles 数组";
-                    } else {
-                        capture_undo("导入替换");
-                        std::vector<UserObstacleItem> loaded;
-                        loaded.reserve(obs_nodes.size());
-                        for (std::size_t i = 0; i < obs_nodes.size(); ++i) {
-                            const YAML::Node& n = obs_nodes[i];
-                            UserObstacleItem item;
-                            if (n["name"])
-                                item.name = n["name"].as<std::string>();
-                            if (item.name.empty())
-                                item.name = "obs_" + std::to_string(i + 1);
-                            if (n["kind"])
-                                item.kind = ObstacleKindFromName(n["kind"].as<std::string>());
-                            else if (n["type"])
-                                item.kind = ObstacleKindFromName(n["type"].as<std::string>());
-                            if (n["visible"])
-                                item.visible = n["visible"].as<bool>();
-                            ReadVec3(n["color"], &item.color);
-                            if (!ReadTransformQuat(n["transform"], &item.position, &item.rpy_deg)) {
-                                ReadVec3(n["position"], &item.position);
-                                ReadVec3(n["rpy_deg"], &item.rpy_deg);
-                            }
-                            if (item.kind == UserObstacleItem::Kind::Sphere) {
-                                if (n["radius"]) {
-                                    item.params = glm::vec3(n["radius"].as<float>(), 0.0f, 0.0f);
-                                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 1) {
-                                    item.params = glm::vec3(n["size"][0].as<float>(), 0.0f, 0.0f);
-                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 1) {
-                                    item.params = glm::vec3(n["params"][0].as<float>(), 0.0f, 0.0f);
-                                }
-                            } else if (item.kind == UserObstacleItem::Kind::Cylinder) {
-                                if (n["radius"]) {
-                                    item.params.x = n["radius"].as<float>();
-                                }
-                                if (n["height"]) {
-                                    item.params.y = n["height"].as<float>();
-                                } else if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 2) {
-                                    item.params.y = n["size"][1].as<float>();
-                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 2) {
-                                    item.params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), 0.0f);
-                                }
-                            } else {
-                                if (n["size"] && n["size"].IsSequence() && n["size"].size() >= 3) {
-                                    item.params = glm::vec3(n["size"][0].as<float>(), n["size"][1].as<float>(), n["size"][2].as<float>());
-                                } else if (n["params"] && n["params"].IsSequence() && n["params"].size() >= 3) {
-                                    item.params = glm::vec3(n["params"][0].as<float>(), n["params"][1].as<float>(), n["params"][2].as<float>());
-                                }
-                            }
-                            loaded.push_back(item);
-                        }
-                        st->items          = std::move(loaded);
-                        st->selected_index = st->items.empty() ? -1 : 0;
-                        try_update_next_serial();
-                        import_status = std::string("导入成功: ") + import_path + " (共 " + std::to_string(st->items.size()) + " 个)";
-                    }
-                } catch (const std::exception& e) {
-                    import_status = std::string("导入失败: ") + e.what();
+                capture_undo("导入替换");
+                std::vector<UserObstacleItem> loaded;
+                std::string load_error;
+                if (LoadUserObstaclesFromYaml(import_path, &loaded, &load_error)) {
+                    st->items          = std::move(loaded);
+                    st->selected_index = st->items.empty() ? -1 : 0;
+                    try_update_next_serial();
+                    import_status = std::string("导入成功: ") + import_path + " (共 " + std::to_string(st->items.size()) + " 个)";
+                } else {
+                    import_status = load_error;
                 }
             }
             if (!import_status.empty()) {

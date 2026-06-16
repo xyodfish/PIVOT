@@ -1,0 +1,5 @@
+# 轨迹+障碍物离线导入包示例
+# 路径相对于本文件所在目录；不修改 CSV / 障碍物 YAML 原有格式
+trajectory: ../trajectories/galbot_g1_playback.csv
+obstacles: demo_obstacles.yaml
+auto_play: false

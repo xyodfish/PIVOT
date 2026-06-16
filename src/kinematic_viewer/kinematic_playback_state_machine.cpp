@@ -89,6 +89,46 @@ namespace kinematic_viewer {
         state_->play_time    = std::clamp(time_sec, 0.0f, duration);
     }
 
+    bool PlaybackStateMachine::StepKeyframe(int direction) {
+        if (!state_ || state_->keyframes.empty() || direction == 0) {
+            return false;
+        }
+        if (IsPlaying()) {
+            Pause();
+        } else if (IsStopped()) {
+            state_->mode = DebugPlaybackState::Mode::Paused;
+        }
+
+        const auto& keyframes = state_->keyframes;
+        const float t         = state_->play_time;
+        constexpr float eps   = 1e-4f;
+        int target            = -1;
+
+        if (direction > 0) {
+            for (int i = 0; i < static_cast<int>(keyframes.size()); ++i) {
+                if (static_cast<float>(keyframes[static_cast<size_t>(i)].t) > t + eps) {
+                    target = i;
+                    break;
+                }
+            }
+        } else {
+            for (int i = static_cast<int>(keyframes.size()) - 1; i >= 0; --i) {
+                if (static_cast<float>(keyframes[static_cast<size_t>(i)].t) < t - eps) {
+                    target = i;
+                    break;
+                }
+            }
+        }
+
+        if (target < 0) {
+            return false;
+        }
+
+        state_->play_time               = static_cast<float>(keyframes[static_cast<size_t>(target)].t);
+        state_->selected_keyframe_index = target;
+        return true;
+    }
+
     void PlaybackStateMachine::AdvanceTime(float dt_sec) {
         if (!state_ || CurrentState() != State::Playing) {
             return;

@@ -28,6 +28,9 @@ namespace kinematic_viewer {
         // Seek to a specific time (clamped to [0, duration]).
         void Seek(float time_sec);
 
+        // Step to the previous (-1) or next (+1) keyframe. Pauses if playing.
+        bool StepKeyframe(int direction);
+
         // Advance playback time by dt (only when Playing).
         void AdvanceTime(float dt_sec);
 

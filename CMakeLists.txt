@@ -169,6 +169,7 @@ add_library(rkv_viewer_core SHARED
     src/kinematic_viewer/kinematic_config_watcher.cpp
     src/kinematic_viewer/kinematic_playback_state_machine.cpp
     src/kinematic_viewer/kinematic_playback.cpp
+    src/kinematic_viewer/kinematic_playback_bundle.cpp
     src/kinematic_viewer/kinematic_collision_monitor.cpp
     src/kinematic_viewer/kinematic_collision_distance.cpp
     src/kinematic_viewer/kinematic_initial_pose.cpp

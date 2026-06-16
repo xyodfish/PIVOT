@@ -8,8 +8,10 @@
 #include "kinematic_viewer/kinematic_path_planner.h"
 #include "kinematic_viewer/kinematic_string_utils.h"
 
+#include "kinematic_viewer/kinematic_playback_bundle.h"
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "kinematic_viewer/kinematic_user_obstacles.h"
+#include "kinematic_viewer/kinematic_viewer_state.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -39,6 +41,123 @@ namespace kinematic_viewer {
         bool IsTrajectoryFileExt(const std::filesystem::path& path) {
             const std::string ext = LowerFileExtension(path.string());
             return ext == ".csv";
+        }
+
+        bool IsYamlFileExt(const std::filesystem::path& path) {
+            const std::string ext = LowerFileExtension(path.string());
+            return ext == ".yaml" || ext == ".yml";
+        }
+
+        void RenderPlaybackBundleImport(DebugPlaybackState* playbackState, ViewerState* viewerState) {
+            if (playbackState == nullptr || viewerState == nullptr) {
+                return;
+            }
+
+            static char bundle_path[512]        = "config/playback_bundles/demo_playback_bundle.yaml";
+            static char bundle_browser_dir[512] = "";
+            static std::string bundle_status;
+
+            ImGui::Separator();
+            ImGui::TextUnformatted("轨迹+障碍物离线导入");
+            ImGui::TextDisabled("导入包 YAML 引用现有 CSV 与障碍物 YAML；也可选择会话目录");
+            ImGui::InputText("导入包路径", bundle_path, sizeof(bundle_path));
+            if (ImGui::Button("浏览导入包")) {
+                const std::string default_dir = NormalizePath(std::filesystem::current_path().string());
+                std::snprintf(bundle_browser_dir, sizeof(bundle_browser_dir), "%s", default_dir.c_str());
+                ImGui::OpenPopup("playback_bundle_import_popup");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("一键导入轨迹+障碍物")) {
+                PlaybackBundleSpec spec;
+                std::string parse_error;
+                if (!ParsePlaybackBundle(bundle_path, &spec, &parse_error)) {
+                    bundle_status = parse_error;
+                } else {
+                    std::string apply_status;
+                    std::string apply_error;
+                    if (ApplyPlaybackBundle(spec, &viewerState->user_obstacles, playbackState, &apply_status, &apply_error)) {
+                        bundle_status = apply_status;
+                    } else {
+                        bundle_status = apply_error;
+                    }
+                }
+            }
+
+            if (ImGui::BeginPopupModal("playback_bundle_import_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::InputText("目录", bundle_browser_dir, sizeof(bundle_browser_dir));
+                ImGui::SameLine();
+                if (ImGui::Button("进入目录##bundle_import")) {
+                    const std::string normalized = NormalizePath(bundle_browser_dir);
+                    std::snprintf(bundle_browser_dir, sizeof(bundle_browser_dir), "%s", normalized.c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("上一级##bundle_import")) {
+                    std::filesystem::path current = std::filesystem::path(NormalizePath(bundle_browser_dir));
+                    std::filesystem::path parent  = current.parent_path();
+                    if (parent.empty()) {
+                        parent = std::filesystem::path("/");
+                    }
+                    std::snprintf(bundle_browser_dir, sizeof(bundle_browser_dir), "%s", parent.string().c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("HOME##bundle_import")) {
+                    const char* home = std::getenv("HOME");
+                    if (home != nullptr && home[0] != '\0') {
+                        std::snprintf(bundle_browser_dir, sizeof(bundle_browser_dir), "%s", home);
+                    }
+                }
+
+                std::error_code ec;
+                const std::filesystem::path browse_path(bundle_browser_dir);
+                if (!std::filesystem::exists(browse_path, ec) || !std::filesystem::is_directory(browse_path, ec)) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "目录不可用");
+                } else {
+                    std::vector<std::filesystem::path> dirs;
+                    std::vector<std::filesystem::path> files;
+                    for (auto it = std::filesystem::directory_iterator(browse_path, ec); !ec && it != std::filesystem::directory_iterator();
+                         ++it) {
+                        if (it->is_directory(ec)) {
+                            dirs.push_back(it->path());
+                        } else if (it->is_regular_file(ec) && IsYamlFileExt(it->path())) {
+                            files.push_back(it->path());
+                        }
+                    }
+                    std::sort(dirs.begin(), dirs.end());
+                    std::sort(files.begin(), files.end());
+                    if (ImGui::BeginChild("playback_bundle_import_list", ImVec2(620, 280), true)) {
+                        for (const auto& d : dirs) {
+                            std::string label = "[DIR] " + d.filename().string();
+                            if (ImGui::Selectable(label.c_str(), false)) {
+                                std::snprintf(bundle_browser_dir, sizeof(bundle_browser_dir), "%s", d.string().c_str());
+                            }
+                        }
+                        for (const auto& f : files) {
+                            std::string label = f.filename().string();
+                            if (ImGui::Selectable(label.c_str(), false)) {
+                                std::snprintf(bundle_path, sizeof(bundle_path), "%s", f.string().c_str());
+                                ImGui::CloseCurrentPopup();
+                            }
+                        }
+                        ImGui::EndChild();
+                    }
+                    ImGui::TextDisabled("也可在上方目录栏输入会话目录路径后关闭弹窗，再点一键导入");
+                }
+                if (ImGui::Button("使用当前目录##bundle_import")) {
+                    std::snprintf(bundle_path, sizeof(bundle_path), "%s", NormalizePath(bundle_browser_dir).c_str());
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("关闭##bundle_import")) {
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+
+            if (!bundle_status.empty()) {
+                const bool ok = bundle_status.find("成功") != std::string::npos;
+                ImGui::TextColored(ok ? ImVec4(0.60f, 0.92f, 0.60f, 1.0f) : ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "%s",
+                                    bundle_status.c_str());
+            }
         }
 
         std::string TrimCopy(const std::string& text) {
@@ -1375,7 +1494,7 @@ namespace kinematic_viewer {
     }
 
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
-                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints) {
+                             rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints, ViewerState* viewerState) {
         if (playbackState == nullptr || playbackPlayer == nullptr || playback_sm == nullptr || scene == nullptr) {
             return;
         }
@@ -1528,6 +1647,8 @@ namespace kinematic_viewer {
                 }
                 ImGui::TextColored(color, "%s", playbackState->trajectory_io_status.c_str());
             }
+
+            kinematic_sidebar_panels_internal::RenderPlaybackBundleImport(playbackState, viewerState);
         }
 
         if (ImGui::CollapsingHeader("播放控制", ImGuiTreeNodeFlags_DefaultOpen)) {

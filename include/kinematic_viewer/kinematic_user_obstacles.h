@@ -35,6 +35,9 @@ namespace kinematic_viewer {
 
     void RenderUserObstaclePanel(UserObstacleState* obstacles, bool angle_unit_deg = true);
 
+    bool LoadUserObstaclesFromYaml(const std::string& path, std::vector<UserObstacleItem>* out_items, std::string* errorMessage);
+    void UpdateUserObstacleNextSerial(UserObstacleState* obstacles);
+
     void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene,
                                                float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result);
 

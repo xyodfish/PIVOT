@@ -1,5 +1,6 @@
 #include "kinematic_viewer/rkv_panel_plugin.h"
 #include "kinematic_viewer/kinematic_sidebar_panels.h"
+#include "kinematic_viewer/kinematic_viewer_state.h"
 #include "kinematic_viewer/kinematic_playback.h"
 #include "kinematic_viewer/kinematic_playback_state_machine.h"
 #include "rkv/scene.h"
@@ -18,7 +19,8 @@ void rkv_panel_render(RkvPanelCtx* ctx) {
         static_cast<kinematic_viewer::TrajectoryPlayer*>(ctx->playback_player),
         static_cast<kinematic_viewer::PlaybackStateMachine*>(ctx->playback_sm),
         static_cast<rkv::RobotScene*>(ctx->scene),
-        *static_cast<const JointVec*>(ctx->joints));
+        *static_cast<const JointVec*>(ctx->joints),
+        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state));
 }
 
 }  // extern "C"

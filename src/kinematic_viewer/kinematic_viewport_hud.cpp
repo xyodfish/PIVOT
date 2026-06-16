@@ -180,7 +180,7 @@ namespace kinematic_viewer {
                 ImGui::EndDisabled();
             }
             ImGui::PopItemWidth();
-            ImGui::TextDisabled("Space 播放/暂停  ·  H 侧栏  ·  1-9 切页  ·  左键旋转  ·  滚轮缩放");
+            ImGui::TextDisabled("Space 播放/暂停  ·  A/D 逐帧  ·  W/S 加减速  ·  H 侧栏  ·  1-9 切页  ·  左键旋转  ·  滚轮缩放");
         }
         ImGui::End();
         hud_style.Pop();

@@ -79,10 +79,14 @@ namespace kinematic_viewer {
         struct ViewportHotkeyResult {
             bool toggled_sidebar = false;
             bool toggled_playback = false;
+            int playback_step_count = 0;
+            int playback_step_direction = 0;  // -1: prev keyframe, +1: next keyframe
+            int playback_speed_adjust = 0;    // -1: slower, +1: faster
         };
 
-        // Space: play/pause; H: toggle sidebar visibility.
-        ViewportHotkeyResult HandleViewportHotkeys(bool enable_hotkeys, bool has_playable_trajectory);
+        // Space: play/pause; A/D: step keyframes; W/S: adjust step/play speed; H: toggle sidebar.
+        ViewportHotkeyResult HandleViewportHotkeys(bool enable_hotkeys, bool has_playable_trajectory, float dt_sec,
+                                                   float play_speed);
 
         // Reset internal mouse tracking (e.g., after window focus change).
         void ResetMouseTracking();
@@ -97,8 +101,10 @@ namespace kinematic_viewer {
         double link_pick_press_x_                        = 0.0;
         double link_pick_press_y_                        = 0.0;
         double link_hover_last_sec_                      = -1.0;
+        float playback_step_accumulator_                 = 0.0f;
         static constexpr double kLinkHoverIntervalSec    = 0.05;
         static constexpr double kLinkPickDragThresholdPx = 6.0;
+        static constexpr float kPlaybackScrubBaseIntervalSec = 0.10f;
 
         bool IsMouseInViewport(double x, double y, int viewport_w, int viewport_h) const;
     };

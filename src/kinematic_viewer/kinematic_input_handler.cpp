@@ -289,16 +289,46 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::ViewportHotkeyResult KinematicInputHandler::HandleViewportHotkeys(bool enable_hotkeys,
-                                                                                            bool has_playable_trajectory) {
+                                                                                            bool has_playable_trajectory,
+                                                                                            float dt_sec, float play_speed) {
         ViewportHotkeyResult result;
         if (!enable_hotkeys) {
+            playback_step_accumulator_ = 0.0f;
             return result;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_H)) {
             result.toggled_sidebar = true;
         }
-        if (has_playable_trajectory && ImGui::IsKeyPressed(ImGuiKey_Space)) {
-            result.toggled_playback = true;
+        if (has_playable_trajectory) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
+                result.toggled_playback = true;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_W, true)) {
+                result.playback_speed_adjust = 1;
+            } else if (ImGui::IsKeyPressed(ImGuiKey_S, true)) {
+                result.playback_speed_adjust = -1;
+            }
+
+            int step_direction = 0;
+            if (ImGui::IsKeyDown(ImGuiKey_A)) {
+                step_direction = -1;
+            } else if (ImGui::IsKeyDown(ImGuiKey_D)) {
+                step_direction = 1;
+            }
+            if (step_direction != 0) {
+                const float interval =
+                    kPlaybackScrubBaseIntervalSec / std::max(0.1f, play_speed);
+                playback_step_accumulator_ += std::max(0.0f, dt_sec);
+                while (playback_step_accumulator_ >= interval) {
+                    playback_step_accumulator_ -= interval;
+                    ++result.playback_step_count;
+                    result.playback_step_direction = step_direction;
+                }
+            } else {
+                playback_step_accumulator_ = 0.0f;
+            }
+        } else {
+            playback_step_accumulator_ = 0.0f;
         }
         return result;
     }

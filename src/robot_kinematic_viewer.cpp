@@ -615,8 +615,8 @@ int main(int argc, char** argv) {
         ui_state.sidebar_page =
             input_handler.HandleSidebarHotkeys(ui_state.sidebar_page, panel_registry.Count(), sidebar_hotkeys_enabled);
 
-        const auto viewport_hotkeys =
-            input_handler.HandleViewportHotkeys(sidebar_hotkeys_enabled, playback_sm.HasKeyframes());
+        const auto viewport_hotkeys = input_handler.HandleViewportHotkeys(
+            sidebar_hotkeys_enabled, playback_sm.HasKeyframes(), static_cast<float>(dt_sec), playback_state.play_speed);
         if (viewport_hotkeys.toggled_sidebar) {
             ui_state.sidebar_hidden = !ui_state.sidebar_hidden;
             ui_feedback.Push(UiSemanticLevel::Info, ui_state.sidebar_hidden ? "已隐藏侧栏 (H 恢复)" : "已显示侧栏", now_sec);
@@ -624,6 +624,23 @@ int main(int argc, char** argv) {
         if (viewport_hotkeys.toggled_playback) {
             if (playback_sm.TogglePlayPause()) {
                 ui_feedback.Push(UiSemanticLevel::Info, playback_sm.IsPlaying() ? "回放: 播放" : "回放: 暂停", now_sec, 1.2);
+            }
+        }
+        if (viewport_hotkeys.playback_speed_adjust != 0) {
+            const float prev_speed = playback_state.play_speed;
+            playback_state.play_speed =
+                std::clamp(playback_state.play_speed + viewport_hotkeys.playback_speed_adjust * 0.1f, 0.1f, 3.0f);
+            if (playback_state.play_speed != prev_speed) {
+                char speed_msg[64];
+                std::snprintf(speed_msg, sizeof(speed_msg), "回放倍速: %.2fx", playback_state.play_speed);
+                ui_feedback.Push(UiSemanticLevel::Info, speed_msg, now_sec, 0.8);
+            }
+        }
+        if (viewport_hotkeys.playback_step_count > 0 && viewport_hotkeys.playback_step_direction != 0) {
+            for (int step = 0; step < viewport_hotkeys.playback_step_count; ++step) {
+                if (playback_sm.StepKeyframe(viewport_hotkeys.playback_step_direction)) {
+                    trajectory_player.SampleAtCurrentTime(playback_state, &scene);
+                }
             }
         }
         if (panel_registry.Count() == 0) {
@@ -1115,7 +1132,7 @@ int main(int argc, char** argv) {
         }
         if (ImGui::CollapsingHeader("操作提示")) {
             ImGui::TextDisabled("视角：左键旋转，中键/Shift+左键平移，右键缩放，滚轮缩放");
-            ImGui::TextDisabled("Space 播放/暂停  ·  H 隐藏/显示侧栏  ·  1-9 切换子页");
+            ImGui::TextDisabled("Space 播放/暂停  ·  A/D 逐帧  ·  W/S 加减速  ·  H 隐藏/显示侧栏  ·  1-9 切换子页");
             ImGui::TextDisabled("场景页可开启 3D 点选 Link；演示视觉适合录屏展示");
         }
         ImGui::Separator();

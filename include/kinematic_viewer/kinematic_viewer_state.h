@@ -59,8 +59,8 @@ namespace kinematic_viewer {
         int mobile_base_pose_input_format = 0;  // 0: x,y,yaw  1: x,y,z,qx,qy,qz,qw
         char mobile_base_pose_input[256]  = {0};
         std::string mobile_base_pose_input_status;
-        int sidebar_page                  = 4;
-        bool scene_panel_active           = false;
+        int sidebar_page        = 4;
+        bool scene_panel_active = false;
         UserObstacleState user_obstacles;
 
         bool is_recording           = false;
@@ -70,15 +70,15 @@ namespace kinematic_viewer {
         char record_filename[256]   = "";  // 空则自动生成
 
         // Presentation / viewport UX
-        bool sidebar_hidden    = false;
-        bool demo_visual_mode  = false;
-        bool show_grid         = true;
-        bool demo_visual_saved = false;
-        bool saved_show_axes = true;
-        bool saved_show_world_axes = true;
-        bool saved_show_collision_bodies = false;
-        bool saved_show_com = false;
-        bool saved_show_grid = true;
+        bool sidebar_hidden                    = false;
+        bool demo_visual_mode                  = false;
+        bool show_grid                         = true;
+        bool demo_visual_saved                 = false;
+        bool saved_show_axes                   = true;
+        bool saved_show_world_axes             = true;
+        bool saved_show_collision_bodies       = false;
+        bool saved_show_com                    = false;
+        bool saved_show_grid                   = true;
         bool saved_enable_link_hover_highlight = false;
     };
 

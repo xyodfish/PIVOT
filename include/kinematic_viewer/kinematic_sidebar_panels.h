@@ -20,8 +20,7 @@ namespace kinematic_viewer {
                                   const CollisionMonitorState* collisionState, const CollisionMonitorResult* collisionResult,
                                   DebugPlaybackState* playbackState, CollisionMonitor* collisionMonitor,
                                   LinkKinematicsAnalyzer* kinematicsAnalyzer);
-    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene,
-                          const std::vector<rkv::RobotScene::JointInfo>& joints);
+    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints);
     void RenderPlaybackPanel(DebugPlaybackState* playbackState, TrajectoryPlayer* playbackPlayer, PlaybackStateMachine* playback_sm,
                              rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints,
                              ViewerState* viewerState = nullptr);
@@ -89,7 +88,6 @@ namespace kinematic_viewer {
     };
 
     void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* planner_ui, DebugPlaybackState* playbackState,
-                                rkv::RobotScene* scene, rkv::IkSolver* solver,
-                                const std::vector<rkv::IkChainStatus>& chains);
+                                rkv::RobotScene* scene, rkv::IkSolver* solver, const std::vector<rkv::IkChainStatus>& chains);
 
 }  // namespace kinematic_viewer

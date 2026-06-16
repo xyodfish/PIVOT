@@ -18,16 +18,14 @@ namespace kinematic_viewer {
 
     class CollisionPairFilterStrategy {
        public:
-        virtual ~CollisionPairFilterStrategy()                                                    = default;
+        virtual ~CollisionPairFilterStrategy() = default;
         virtual bool ShouldEvaluate(const CollisionMonitorState& state, const rkv::RobotScene& scene,
-                                    const rkv::RobotScene::LinkCollisionProxy& a,
-                                    const rkv::RobotScene::LinkCollisionProxy& b) const = 0;
+                                    const rkv::RobotScene::LinkCollisionProxy& a, const rkv::RobotScene::LinkCollisionProxy& b) const = 0;
     };
 
     class DefaultCollisionPairFilterStrategy : public CollisionPairFilterStrategy {
        public:
-        bool ShouldEvaluate(const CollisionMonitorState& state, const rkv::RobotScene& scene,
-                            const rkv::RobotScene::LinkCollisionProxy& a,
+        bool ShouldEvaluate(const CollisionMonitorState& state, const rkv::RobotScene& scene, const rkv::RobotScene::LinkCollisionProxy& a,
                             const rkv::RobotScene::LinkCollisionProxy& b) const override;
     };
 

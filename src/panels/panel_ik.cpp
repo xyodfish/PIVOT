@@ -13,10 +13,8 @@ void rkv_panel_info(RkvPanelInfo* out) {
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
     kinematic_viewer::RenderIkPanel(
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
-        static_cast<kinematic_viewer::IkState*>(ctx->ik_state),
-        static_cast<kinematic_viewer::KinematicIkController*>(ctx->ik_controller),
-        static_cast<rkv::RobotScene*>(ctx->scene));
+        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state), static_cast<kinematic_viewer::IkState*>(ctx->ik_state),
+        static_cast<kinematic_viewer::KinematicIkController*>(ctx->ik_controller), static_cast<rkv::RobotScene*>(ctx->scene));
 }
 
 }  // extern "C"

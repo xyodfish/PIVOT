@@ -12,9 +12,8 @@ void rkv_panel_info(RkvPanelInfo* out) {
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
     using TfVec = std::vector<rkv::RobotScene::LinkTfInfo>;
-    kinematic_viewer::RenderTfPanel(
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
-        *static_cast<const TfVec*>(ctx->tf_infos));
+    kinematic_viewer::RenderTfPanel(static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
+                                    *static_cast<const TfVec*>(ctx->tf_infos));
 }
 
 }  // extern "C"

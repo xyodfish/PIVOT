@@ -15,13 +15,10 @@ void rkv_panel_info(RkvPanelInfo* out) {
 void rkv_panel_render(RkvPanelCtx* ctx) {
     using JointVec = std::vector<rkv::RobotScene::JointInfo>;
     using ChainVec = std::vector<rkv::IkChainStatus>;
-    kinematic_viewer::RenderTeachPanel(
-        static_cast<kinematic_viewer::TeachProgramState*>(ctx->teach_state),
-        static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
-        static_cast<rkv::RobotScene*>(ctx->scene),
-        static_cast<rkv::IkSolver*>(ctx->ik_solver),
-        *static_cast<const ChainVec*>(ctx->ik_chains),
-        *static_cast<const JointVec*>(ctx->joints));
+    kinematic_viewer::RenderTeachPanel(static_cast<kinematic_viewer::TeachProgramState*>(ctx->teach_state),
+                                       static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
+                                       static_cast<rkv::RobotScene*>(ctx->scene), static_cast<rkv::IkSolver*>(ctx->ik_solver),
+                                       *static_cast<const ChainVec*>(ctx->ik_chains), *static_cast<const JointVec*>(ctx->joints));
 }
 
 }  // extern "C"

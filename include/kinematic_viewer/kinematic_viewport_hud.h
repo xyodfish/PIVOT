@@ -15,13 +15,13 @@ namespace kinematic_viewer {
         int viewport_w = 0;
         int viewport_h = 0;
 
-        const ViewerState* ui_state = nullptr;
+        const ViewerState* ui_state        = nullptr;
         DebugPlaybackState* playback_state = nullptr;
-        PlaybackStateMachine* playback_sm = nullptr;
-        TrajectoryPlayer* playback_player = nullptr;
-        rkv::RobotScene* scene = nullptr;
+        PlaybackStateMachine* playback_sm  = nullptr;
+        TrajectoryPlayer* playback_player  = nullptr;
+        rkv::RobotScene* scene             = nullptr;
 
-        const CollisionMonitorState* collision_state = nullptr;
+        const CollisionMonitorState* collision_state   = nullptr;
         const CollisionMonitorResult* collision_result = nullptr;
 
         const VideoRecorder* video_recorder = nullptr;

@@ -9,9 +9,8 @@ void rkv_panel_info(RkvPanelInfo* out) {
 }
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
-    kinematic_viewer::RenderPointCloudPanel(
-        static_cast<kinematic_viewer::PointCloudUiState*>(ctx->point_cloud_state),
-        static_cast<kinematic_viewer::KinematicPointCloudLayer*>(ctx->point_cloud_layer));
+    kinematic_viewer::RenderPointCloudPanel(static_cast<kinematic_viewer::PointCloudUiState*>(ctx->point_cloud_state),
+                                            static_cast<kinematic_viewer::KinematicPointCloudLayer*>(ctx->point_cloud_layer));
 }
 
 }  // extern "C"

@@ -78,8 +78,8 @@ namespace kinematic_viewer {
             return true;
         }
 
-        bool ProjectWorldToScreen(const glm::vec3& world, const glm::mat4& view, const glm::mat4& proj, int viewport_w,
-                                  int viewport_h, glm::vec2* out_screen) {
+        bool ProjectWorldToScreen(const glm::vec3& world, const glm::mat4& view, const glm::mat4& proj, int viewport_w, int viewport_h,
+                                  glm::vec2* out_screen) {
             if (out_screen == nullptr || viewport_w <= 0 || viewport_h <= 0) {
                 return false;
             }
@@ -88,8 +88,8 @@ namespace kinematic_viewer {
                 return false;
             }
             const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            out_screen->x         = (ndc.x * 0.5f + 0.5f) * static_cast<float>(viewport_w);
-            out_screen->y         = (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(viewport_h);
+            out_screen->x       = (ndc.x * 0.5f + 0.5f) * static_cast<float>(viewport_w);
+            out_screen->y       = (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(viewport_h);
             return true;
         }
 
@@ -120,7 +120,7 @@ namespace kinematic_viewer {
             }
             glm::vec3 ray_o(0.0f), ray_d(0.0f);
             if (!ComputeWorldRayFromScreen(static_cast<float>(ctx.mouse_x), static_cast<float>(ctx.mouse_y), ctx.viewport_w, ctx.viewport_h,
-                                          view, proj, &ray_o, &ray_d)) {
+                                           view, proj, &ray_o, &ray_d)) {
                 return false;
             }
             return scene->pickLinkByRay(ray_o, ray_d, out_link_name, nullptr, rkv::RobotScene::LinkPickMode::Fast);
@@ -156,7 +156,7 @@ namespace kinematic_viewer {
                 return static_cast<float>(mouse_dx * kJointDragRadPerPixel);
             }
 
-            glm::vec2 axis_dir = axis_screen - origin_screen;
+            glm::vec2 axis_dir   = axis_screen - origin_screen;
             const float axis_len = glm::length(axis_dir);
             if (axis_len < 1e-4f) {
                 return static_cast<float>(mouse_dx * kJointDragRadPerPixel);
@@ -176,8 +176,7 @@ namespace kinematic_viewer {
         return (x >= 0.0 && x < static_cast<double>(viewport_w) && y >= 0.0 && y < static_cast<double>(viewport_h));
     }
 
-    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(rkv::OrbitCamera* camera,
-                                                                                 const UpdateContext& ctx) {
+    KinematicInputHandler::CameraInputResult KinematicInputHandler::UpdateCamera(rkv::OrbitCamera* camera, const UpdateContext& ctx) {
         CameraInputResult result;
         if (!camera) {
             return result;
@@ -363,7 +362,7 @@ namespace kinematic_viewer {
                                                                                   const glm::mat4& proj, rkv::RobotScene* scene) {
         JointDragResult result;
         if (scene == nullptr || !ctx.enable_joint_drag) {
-            joint_drag_active_   = false;
+            joint_drag_active_    = false;
             joint_drag_left_prev_ = ctx.left_mouse_down;
             return result;
         }
@@ -375,7 +374,7 @@ namespace kinematic_viewer {
                 if (joint_drag_active_) {
                     result.ended = true;
                 }
-                joint_drag_active_    = false;
+                joint_drag_active_ = false;
                 joint_drag_joint_name_.clear();
                 joint_drag_link_name_.clear();
             }
@@ -407,17 +406,16 @@ namespace kinematic_viewer {
         }
 
         if (joint_drag_active_ && ctx.left_mouse_down) {
-            const double mouse_dx = ctx.mouse_x - joint_drag_last_mouse_x_;
-            const double mouse_dy = ctx.mouse_y - joint_drag_last_mouse_y_;
+            const double mouse_dx    = ctx.mouse_x - joint_drag_last_mouse_x_;
+            const double mouse_dy    = ctx.mouse_y - joint_drag_last_mouse_y_;
             joint_drag_last_mouse_x_ = ctx.mouse_x;
             joint_drag_last_mouse_y_ = ctx.mouse_y;
             if (!result.started && (std::fabs(mouse_dx) > 1e-6 || std::fabs(mouse_dy) > 1e-6)) {
                 rkv::RobotScene::JointInfo joint_info;
                 if (scene->getJointInfo(joint_drag_joint_name_, &joint_info)) {
-                    const float delta_rad =
-                        ComputeJointDragDeltaRad(scene, joint_drag_joint_name_, mouse_dx, mouse_dy, view, proj, ctx.viewport_w,
-                                                 ctx.viewport_h);
-                    const float next_pos = std::clamp(joint_info.position + delta_rad, joint_info.min_angle, joint_info.max_angle);
+                    const float delta_rad = ComputeJointDragDeltaRad(scene, joint_drag_joint_name_, mouse_dx, mouse_dy, view, proj,
+                                                                     ctx.viewport_w, ctx.viewport_h);
+                    const float next_pos  = std::clamp(joint_info.position + delta_rad, joint_info.min_angle, joint_info.max_angle);
                     scene->setJointPositionByName(joint_drag_joint_name_, next_pos);
                 }
             }
@@ -468,8 +466,8 @@ namespace kinematic_viewer {
     }
 
     KinematicInputHandler::ViewportHotkeyResult KinematicInputHandler::HandleViewportHotkeys(bool enable_hotkeys,
-                                                                                            bool has_playable_trajectory,
-                                                                                            float dt_sec, float play_speed) {
+                                                                                             bool has_playable_trajectory, float dt_sec,
+                                                                                             float play_speed) {
         ViewportHotkeyResult result;
         if (!enable_hotkeys) {
             playback_step_accumulator_ = 0.0f;
@@ -495,8 +493,7 @@ namespace kinematic_viewer {
                 step_direction = 1;
             }
             if (step_direction != 0) {
-                const float interval =
-                    kPlaybackScrubBaseIntervalSec / std::max(0.1f, play_speed);
+                const float interval = kPlaybackScrubBaseIntervalSec / std::max(0.1f, play_speed);
                 playback_step_accumulator_ += std::max(0.0f, dt_sec);
                 while (playback_step_accumulator_ >= interval) {
                     playback_step_accumulator_ -= interval;
@@ -513,7 +510,7 @@ namespace kinematic_viewer {
     }
 
     void KinematicInputHandler::ResetMouseTracking() {
-        first_mouse_ = true;
+        first_mouse_                   = true;
         joint_drag_active_             = false;
         joint_drag_suppress_link_pick_ = false;
         joint_drag_joint_name_.clear();

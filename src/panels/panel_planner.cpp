@@ -14,13 +14,11 @@ void rkv_panel_info(RkvPanelInfo* out) {
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
     using ChainVec = std::vector<rkv::IkChainStatus>;
-    kinematic_viewer::RenderPathPlannerPanel(
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
-        static_cast<kinematic_viewer::PathPlannerUiState*>(ctx->path_planner_ui),
-        static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
-        static_cast<rkv::RobotScene*>(ctx->scene),
-        static_cast<rkv::IkSolver*>(ctx->ik_solver),
-        *static_cast<const ChainVec*>(ctx->ik_chains));
+    kinematic_viewer::RenderPathPlannerPanel(static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
+                                             static_cast<kinematic_viewer::PathPlannerUiState*>(ctx->path_planner_ui),
+                                             static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
+                                             static_cast<rkv::RobotScene*>(ctx->scene), static_cast<rkv::IkSolver*>(ctx->ik_solver),
+                                             *static_cast<const ChainVec*>(ctx->ik_chains));
 }
 
 }  // extern "C"

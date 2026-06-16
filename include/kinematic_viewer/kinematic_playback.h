@@ -11,7 +11,7 @@ namespace kinematic_viewer {
 
     class TrajectoryInterpolator {
        public:
-        virtual ~TrajectoryInterpolator()                                   = default;
+        virtual ~TrajectoryInterpolator()                         = default;
         virtual void SampleAndApply(const DebugPlaybackState& playbackState, float sampleTimeSec, int* currentSegmentIndex,
                                     rkv::RobotScene* scene) const = 0;
     };
@@ -46,18 +46,15 @@ namespace kinematic_viewer {
 
     bool LoadTrajectoryFromFile(const std::string& path, DebugPlaybackState* playbackState, std::string* errorMessage);
     bool SaveTrajectoryToFile(const std::string& path, const DebugPlaybackState& playbackState, std::string* errorMessage);
-    void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState,
-                                            const std::vector<rkv::RobotScene::JointInfo>& joints,
+    void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
                                             const rkv::RobotScene& scene);
 
-    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
-                                      const std::vector<rkv::RobotScene::JointInfo>& joints, std::string* errorMessage);
-    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
-                                 const std::vector<rkv::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                 rkv::RobotScene* scene);
+    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                      std::string* errorMessage);
+    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                 TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene);
     void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
-                                      TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene,
-                                      PlaybackStateMachine* playback_sm);
+                                      TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene, PlaybackStateMachine* playback_sm);
     void StartTrajectorySequence(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
                                  TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene, PlaybackStateMachine* playback_sm);
     void TickTrajectorySequence(DebugPlaybackState* playbackState, PlaybackStateMachine* playback_sm, bool was_playing_last_frame,

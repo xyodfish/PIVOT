@@ -59,9 +59,9 @@ namespace rkv {
         struct LinkCollisionProxy {
             std::string link_name;
             std::string visual_name;
-            glm::vec3 world_center = glm::vec3(0.0f);
-            float radius_m         = 0.0f;
-            bool has_world_aabb    = false;
+            glm::vec3 world_center   = glm::vec3(0.0f);
+            float radius_m           = 0.0f;
+            bool has_world_aabb      = false;
             glm::vec3 world_aabb_min = glm::vec3(0.0f);
             glm::vec3 world_aabb_max = glm::vec3(0.0f);
         };

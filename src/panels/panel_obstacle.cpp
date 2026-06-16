@@ -10,8 +10,7 @@ void rkv_panel_info(RkvPanelInfo* out) {
 }
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
-    kinematic_viewer::RenderObstaclePanel(
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state));
+    kinematic_viewer::RenderObstaclePanel(static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state));
 }
 
 }  // extern "C"

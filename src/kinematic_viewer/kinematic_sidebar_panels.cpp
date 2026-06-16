@@ -155,8 +155,7 @@ namespace kinematic_viewer {
 
             if (!bundle_status.empty()) {
                 const bool ok = bundle_status.find("成功") != std::string::npos;
-                ImGui::TextColored(ok ? ImVec4(0.60f, 0.92f, 0.60f, 1.0f) : ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "%s",
-                                    bundle_status.c_str());
+                ImGui::TextColored(ok ? ImVec4(0.60f, 0.92f, 0.60f, 1.0f) : ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "%s", bundle_status.c_str());
             }
         }
 
@@ -403,8 +402,8 @@ namespace kinematic_viewer {
             return true;
         }
 
-        bool ApplyJointGroupValues(const ViewerState::JointInputGroup& group, const std::vector<float>& values,
-                                   rkv::RobotScene* scene, std::string* errorMessage) {
+        bool ApplyJointGroupValues(const ViewerState::JointInputGroup& group, const std::vector<float>& values, rkv::RobotScene* scene,
+                                   std::string* errorMessage) {
             if (scene == nullptr) {
                 if (errorMessage != nullptr) {
                     *errorMessage = "内部错误：scene为空";
@@ -1173,8 +1172,7 @@ namespace kinematic_viewer {
         }
     }
 
-    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene,
-                          const std::vector<rkv::RobotScene::JointInfo>& joints) {
+    void RenderJointPanel(ViewerState* uiState, rkv::RobotScene* scene, const std::vector<rkv::RobotScene::JointInfo>& joints) {
         if (uiState == nullptr || scene == nullptr) {
             return;
         }
@@ -1881,9 +1879,8 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // Path Planner Panel
     // ------------------------------------------------------------------
-    void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* ui, DebugPlaybackState* playbackState,
-                                rkv::RobotScene* scene, rkv::IkSolver* solver,
-                                const std::vector<rkv::IkChainStatus>& chains) {
+    void RenderPathPlannerPanel(ViewerState* uiState, PathPlannerUiState* ui, DebugPlaybackState* playbackState, rkv::RobotScene* scene,
+                                rkv::IkSolver* solver, const std::vector<rkv::IkChainStatus>& chains) {
         if (uiState == nullptr || ui == nullptr || playbackState == nullptr || scene == nullptr || solver == nullptr) {
             return;
         }
@@ -2066,10 +2063,10 @@ namespace kinematic_viewer {
                         ptp_params.start_positions.push_back(joints[i].position);
                         ptp_params.goal_positions.push_back(joints[i].position + ui->ptp_goal_offsets[i]);
                     }
-                    ptp_params.max_vel  = ui->ptp_max_vel;
-                    ptp_params.max_acc  = ui->ptp_max_acc;
-                    ptp_params.max_jerk = ui->ptp_max_jerk;
-                    ptp_params.delta_t  = ui->ptp_delta_t;
+                    ptp_params.max_vel   = ui->ptp_max_vel;
+                    ptp_params.max_acc   = ui->ptp_max_acc;
+                    ptp_params.max_jerk  = ui->ptp_max_jerk;
+                    ptp_params.delta_t   = ui->ptp_delta_t;
                     ptp_params.profile   = (ui->ptp_profile == 0) ? "TVP" : "DSVP";
                     ptp_params.sync_mode = (ui->ptp_sync_mode == 0) ? "hold" : "time_scaling";
 

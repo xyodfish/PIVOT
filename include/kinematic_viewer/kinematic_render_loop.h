@@ -29,7 +29,7 @@ namespace kinematic_viewer {
             GLuint line_shader  = 0;
             GLuint point_shader = 0;
 
-            rkv::RobotScene* scene                  = nullptr;
+            rkv::RobotScene* scene                            = nullptr;
             const PointCloudUiState* point_cloud              = nullptr;
             const KinematicPointCloudLayer* point_cloud_layer = nullptr;
             const ViewerState* ui_state                       = nullptr;

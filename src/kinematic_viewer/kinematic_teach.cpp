@@ -27,8 +27,7 @@ namespace kinematic_viewer {
             return out;
         }
 
-        bool FindLinkWorldPose(const rkv::RobotScene& scene, const std::string& link_name, glm::vec3* position,
-                               glm::quat* orientation) {
+        bool FindLinkWorldPose(const rkv::RobotScene& scene, const std::string& link_name, glm::vec3* position, glm::quat* orientation) {
             if (position == nullptr || orientation == nullptr || link_name.empty()) {
                 return false;
             }

@@ -38,7 +38,7 @@ namespace kinematic_viewer {
     bool LoadUserObstaclesFromYaml(const std::string& path, std::vector<UserObstacleItem>* out_items, std::string* errorMessage);
     void UpdateUserObstacleNextSerial(UserObstacleState* obstacles);
 
-    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene,
-                                               float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result);
+    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene, float warning_distance_m,
+                                               float danger_distance_m, CollisionMonitorResult* result);
 
 }  // namespace kinematic_viewer

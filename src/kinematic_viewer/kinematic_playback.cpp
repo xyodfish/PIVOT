@@ -291,8 +291,7 @@ namespace kinematic_viewer {
         }
     }
 
-    void TrajectoryPlayer::RecordKeyframe(DebugPlaybackState* playbackState,
-                                          const std::vector<rkv::RobotScene::JointInfo>& joints,
+    void TrajectoryPlayer::RecordKeyframe(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
                                           const rkv::RobotScene& scene) const {
         if (playbackState == nullptr) {
             return;
@@ -654,8 +653,7 @@ namespace kinematic_viewer {
         return false;
     }
 
-    void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState,
-                                            const std::vector<rkv::RobotScene::JointInfo>& joints,
+    void BuildDemoTrajectoryFromCurrentPose(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
                                             const rkv::RobotScene& scene) {
         if (playbackState == nullptr) {
             return;
@@ -714,8 +712,8 @@ namespace kinematic_viewer {
         playbackState->selected_keyframe_index = 0;
     }
 
-    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState,
-                                      const std::vector<rkv::RobotScene::JointInfo>& joints, std::string* errorMessage) {
+    bool ValidateTrajectoryJointNames(const DebugPlaybackState& playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                      std::string* errorMessage) {
         std::unordered_set<std::string> sceneJointNames;
         for (const auto& joint : joints) {
             sceneJointNames.insert(joint.name);
@@ -775,9 +773,8 @@ namespace kinematic_viewer {
         return true;
     }
 
-    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index,
-                                 const std::vector<rkv::RobotScene::JointInfo>& joints, TrajectoryPlayer* playbackPlayer,
-                                 rkv::RobotScene* scene) {
+    bool LoadTrajectoryListEntry(DebugPlaybackState* playbackState, int index, const std::vector<rkv::RobotScene::JointInfo>& joints,
+                                 TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene) {
         if (playbackState == nullptr || playbackPlayer == nullptr || scene == nullptr || index < 0 ||
             index >= static_cast<int>(playbackState->trajectory_files.size())) {
             return false;
@@ -820,8 +817,7 @@ namespace kinematic_viewer {
     }
 
     void ProcessPendingTrajectoryLoad(DebugPlaybackState* playbackState, const std::vector<rkv::RobotScene::JointInfo>& joints,
-                                      TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene,
-                                      PlaybackStateMachine* playback_sm) {
+                                      TrajectoryPlayer* playbackPlayer, rkv::RobotScene* scene, PlaybackStateMachine* playback_sm) {
         if (playbackState == nullptr || playbackState->pending_trajectory_load_index < 0) {
             return;
         }

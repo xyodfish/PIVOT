@@ -28,8 +28,7 @@ namespace kinematic_viewer {
         void SaveActiveMarkerToTarget();
 
         // IK solve entry points
-        bool ApplyIkForActiveChain(rkv::RobotScene* scene, bool force_orientation_lock, bool fast_mode,
-                                   bool prefer_position_only_target);
+        bool ApplyIkForActiveChain(rkv::RobotScene* scene, bool force_orientation_lock, bool fast_mode, bool prefer_position_only_target);
         bool RefineActiveChainToMarker(rkv::RobotScene* scene);
 
         // Utility

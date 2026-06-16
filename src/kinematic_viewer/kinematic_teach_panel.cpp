@@ -113,9 +113,8 @@ namespace kinematic_viewer {
 
     }  // namespace kinematic_teach_panel_internal
 
-    void RenderTeachPanel(TeachProgramState* teach, DebugPlaybackState* playback_state, rkv::RobotScene* scene,
-                          rkv::IkSolver* solver, const std::vector<rkv::IkChainStatus>& chains,
-                          const std::vector<rkv::RobotScene::JointInfo>& joints) {
+    void RenderTeachPanel(TeachProgramState* teach, DebugPlaybackState* playback_state, rkv::RobotScene* scene, rkv::IkSolver* solver,
+                          const std::vector<rkv::IkChainStatus>& chains, const std::vector<rkv::RobotScene::JointInfo>& joints) {
         if (teach == nullptr || scene == nullptr) {
             return;
         }

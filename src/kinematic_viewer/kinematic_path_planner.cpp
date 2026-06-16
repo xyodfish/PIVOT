@@ -362,9 +362,8 @@ namespace kinematic_viewer {
     // ------------------------------------------------------------------
     // IK Solver for Cartesian Path (serial solve with scene state update)
     // ------------------------------------------------------------------
-    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene,
-                                                 rkv::IkSolver* solver, int chain_index,
-                                                 const IkSolveProgressCallback& progress_cb) {
+    JointSpaceTrajectory solveIkForCartesianPath(const CartesianPathResult& cartesian_path, rkv::RobotScene* scene, rkv::IkSolver* solver,
+                                                 int chain_index, const IkSolveProgressCallback& progress_cb) {
         JointSpaceTrajectory result;
         if (!cartesian_path.success || cartesian_path.waypoints.empty()) {
             result.status = "错误: 笛卡尔路径无效";
@@ -597,8 +596,8 @@ namespace kinematic_viewer {
             result.joint_names = params.joint_names;
             result.times.push_back(0.0f);
             result.joint_positions.push_back(params.start_positions);
-            result.success     = true;
-            result.status      = "成功: 所有关节无运动";
+            result.success = true;
+            result.status  = "成功: 所有关节无运动";
             return result;
         }
 
@@ -631,7 +630,7 @@ namespace kinematic_viewer {
                     continue;
                 }
 
-                const vp::BCs<double> bc = makeJointPTPBoundaryCondition(params, i);
+                const vp::BCs<double> bc            = makeJointPTPBoundaryCondition(params, i);
                 std::vector<vp::BCs<double>> bc_vec = {bc};
                 std::shared_ptr<vp::VelocityPlannerInterface<double>> planner;
                 if (params.profile == "TVP") {
@@ -713,7 +712,7 @@ namespace kinematic_viewer {
                 return result;
             }
 
-            result.joint_names = params.joint_names;
+            result.joint_names    = params.joint_names;
             const size_t n_points = per_dof_trajs[0].size();
             result.times.reserve(n_points);
             result.joint_positions.reserve(n_points);

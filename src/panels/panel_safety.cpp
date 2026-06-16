@@ -10,9 +10,8 @@ void rkv_panel_info(RkvPanelInfo* out) {
 }
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
-    kinematic_viewer::RenderSafetyPanel(
-        static_cast<kinematic_viewer::CollisionMonitorState*>(ctx->collision_state),
-        *static_cast<const kinematic_viewer::CollisionMonitorResult*>(ctx->collision_result));
+    kinematic_viewer::RenderSafetyPanel(static_cast<kinematic_viewer::CollisionMonitorState*>(ctx->collision_state),
+                                        *static_cast<const kinematic_viewer::CollisionMonitorResult*>(ctx->collision_result));
 }
 
 }  // extern "C"

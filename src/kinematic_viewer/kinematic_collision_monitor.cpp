@@ -10,8 +10,8 @@
 namespace kinematic_viewer {
     namespace kinematic_collision_monitor_internal {
 
-        constexpr float kMeshRefineAabbDistanceM = 0.12f;
-        constexpr int kSameChainActiveJointLimit   = 2;
+        constexpr float kMeshRefineAabbDistanceM    = 0.12f;
+        constexpr int kSameChainActiveJointLimit    = 2;
         constexpr size_t kMaxMeshRefinePairsPerEval = 3;
 
         bool IsFixedJointToParent(const rkv::RobotScene& scene, const std::string& link_name) {
@@ -40,8 +40,7 @@ namespace kinematic_viewer {
             }
         }
 
-        int CountActiveJointsOnPath(const rkv::RobotScene& scene, const std::string& descendant,
-                                    const std::string& ancestor) {
+        int CountActiveJointsOnPath(const rkv::RobotScene& scene, const std::string& descendant, const std::string& ancestor) {
             int active_joint_count = 0;
             std::string current    = descendant;
             while (current != ancestor) {
@@ -67,8 +66,7 @@ namespace kinematic_viewer {
             return false;
         }
 
-        void MergeProxyAabb(const rkv::RobotScene::LinkCollisionProxy& src,
-                            rkv::RobotScene::LinkCollisionProxy* dst) {
+        void MergeProxyAabb(const rkv::RobotScene::LinkCollisionProxy& src, rkv::RobotScene::LinkCollisionProxy* dst) {
             if (dst == nullptr || !src.has_world_aabb) {
                 return;
             }
@@ -166,8 +164,7 @@ namespace kinematic_viewer {
 
         const float refine_threshold_m =
             std::max(kinematic_collision_monitor_internal::kMeshRefineAabbDistanceM, state.warning_distance_m * 3.0f);
-        const float mesh_refine_cutoff_m =
-            std::min(refine_threshold_m, candidates.front().aabb_distance.surface_distance_m + 0.02f);
+        const float mesh_refine_cutoff_m = std::min(refine_threshold_m, candidates.front().aabb_distance.surface_distance_m + 0.02f);
 
         size_t mesh_refines_used = 0;
         bool has_closest         = false;
@@ -176,10 +173,9 @@ namespace kinematic_viewer {
             const PairCandidate& candidate = candidates[index];
             CollisionPairDistance distance = candidate.aabb_distance;
 
-            const bool should_refine_mesh =
-                mesh_refines_used < kinematic_collision_monitor_internal::kMaxMeshRefinePairsPerEval &&
-                (index < kinematic_collision_monitor_internal::kMaxMeshRefinePairsPerEval ||
-                 distance.surface_distance_m <= mesh_refine_cutoff_m || distance.surface_distance_m <= 1e-4f);
+            const bool should_refine_mesh = mesh_refines_used < kinematic_collision_monitor_internal::kMaxMeshRefinePairsPerEval &&
+                                            (index < kinematic_collision_monitor_internal::kMaxMeshRefinePairsPerEval ||
+                                             distance.surface_distance_m <= mesh_refine_cutoff_m || distance.surface_distance_m <= 1e-4f);
 
             if (should_refine_mesh) {
                 distance = RefineCollisionPairDistanceWithMesh(scene, distance);

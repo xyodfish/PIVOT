@@ -31,17 +31,14 @@ namespace kinematic_viewer {
                              glm::vec3* out_point_a = nullptr, glm::vec3* out_point_b = nullptr);
 
     CollisionPairDistance BuildCollisionPairDistanceAabb(const rkv::RobotScene::LinkCollisionProxy& a,
-                                                           const rkv::RobotScene::LinkCollisionProxy& b);
+                                                         const rkv::RobotScene::LinkCollisionProxy& b);
 
-    MeshDistanceResult MeshDistanceBetweenLinks(const rkv::RobotScene& scene, const std::string& link_a,
-                                                const std::string& link_b);
+    MeshDistanceResult MeshDistanceBetweenLinks(const rkv::RobotScene& scene, const std::string& link_a, const std::string& link_b);
 
     CollisionPairDistance BuildCollisionPairDistance(const rkv::RobotScene::LinkCollisionProxy& a,
                                                      const rkv::RobotScene::LinkCollisionProxy& b,
-                                                     const rkv::RobotScene* scene_for_mesh = nullptr,
-                                                     bool use_mesh = false);
+                                                     const rkv::RobotScene* scene_for_mesh = nullptr, bool use_mesh = false);
 
-    CollisionPairDistance RefineCollisionPairDistanceWithMesh(const rkv::RobotScene& scene,
-                                                              const CollisionPairDistance& aabb_distance);
+    CollisionPairDistance RefineCollisionPairDistanceWithMesh(const rkv::RobotScene& scene, const CollisionPairDistance& aabb_distance);
 
 }  // namespace kinematic_viewer

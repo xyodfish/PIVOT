@@ -44,7 +44,7 @@ namespace kinematic_viewer {
                 return false;
             }
             try {
-                const YAML::Node root = YAML::LoadFile(config_path.string());
+                const YAML::Node root  = YAML::LoadFile(config_path.string());
                 const YAML::Node files = root["playback"]["trajectory_files"];
                 if (!files || !files.IsSequence() || files.size() == 0) {
                     return false;
@@ -77,8 +77,7 @@ namespace kinematic_viewer {
                     continue;
                 }
                 std::string ext = entry.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(),
-                               [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
                 if (ext == ".csv") {
                     csv_files.push_back(entry.path());
                 }

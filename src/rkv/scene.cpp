@@ -460,10 +460,10 @@ namespace rkv {
         std::map<std::string, std::string> link_parent;
         std::unordered_map<std::string, LinkInertialLocal> link_inertials;
         std::vector<PickMeshTriangle> pick_mesh_triangles;
-        bool pick_mesh_cache_dirty = true;
+        bool pick_mesh_cache_dirty         = true;
         bool collision_proxies_cache_valid = false;
         mutable std::vector<LinkCollisionProxy> cached_collision_proxies;
-        bool joint_pose_dirty      = false;
+        bool joint_pose_dirty = false;
         std::unordered_map<std::string, std::string> link_to_parent_joint;
         std::unordered_map<std::string, JointDetailInfo> joint_details;
         std::vector<JointState> joint_states;
@@ -587,8 +587,8 @@ namespace rkv {
             if (proxy == nullptr || !local_proxy.has_model_aabb) {
                 return;
             }
-            ExpandWorldAabbFromModelAabb(world_from_model, local_proxy.model_aabb_min, local_proxy.model_aabb_max,
-                                         &proxy->world_aabb_min, &proxy->world_aabb_max);
+            ExpandWorldAabbFromModelAabb(world_from_model, local_proxy.model_aabb_min, local_proxy.model_aabb_max, &proxy->world_aabb_min,
+                                         &proxy->world_aabb_max);
             proxy->has_world_aabb = true;
         }
 
@@ -654,10 +654,10 @@ namespace rkv {
                     std::max(std::max(std::fabs(visual.scale.x), std::fabs(visual.scale.y)), std::fabs(visual.scale.z));
 
                 LinkCollisionProxy proxy;
-                proxy.link_name    = visual.parent_link_name;
-                proxy.visual_name  = visual_name;
-                proxy.world_center = world_center;
-                proxy.radius_m     = std::max(0.0f, visual.local_bounding_radius * scale_factor);
+                proxy.link_name              = visual.parent_link_name;
+                proxy.visual_name            = visual_name;
+                proxy.world_center           = world_center;
+                proxy.radius_m               = std::max(0.0f, visual.local_bounding_radius * scale_factor);
                 const glm::vec3 local_extent = glm::vec3(proxy.radius_m);
                 LocalCollisionProxy visual_aabb;
                 visual_aabb.has_model_aabb = proxy.radius_m > 1e-6f;
@@ -723,9 +723,9 @@ namespace rkv {
             out_proxy->has_model_aabb  = false;
 
             if (collision->geometry->type == urdf::Geometry::SPHERE) {
-                auto sphere         = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
-                out_proxy->radius_m = static_cast<float>(sphere->radius);
-                const float radius  = out_proxy->radius_m;
+                auto sphere               = std::static_pointer_cast<urdf::Sphere>(collision->geometry);
+                out_proxy->radius_m       = static_cast<float>(sphere->radius);
+                const float radius        = out_proxy->radius_m;
                 out_proxy->model_aabb_min = glm::vec3(-radius);
                 out_proxy->model_aabb_max = glm::vec3(radius);
                 out_proxy->has_model_aabb = radius > 1e-6f;
@@ -744,10 +744,10 @@ namespace rkv {
             }
 
             if (collision->geometry->type == urdf::Geometry::CYLINDER) {
-                auto cylinder           = std::static_pointer_cast<urdf::Cylinder>(collision->geometry);
-                const float radius      = static_cast<float>(cylinder->radius);
-                const float half_length = static_cast<float>(0.5 * cylinder->length);
-                out_proxy->radius_m     = std::sqrt(radius * radius + half_length * half_length);
+                auto cylinder             = std::static_pointer_cast<urdf::Cylinder>(collision->geometry);
+                const float radius        = static_cast<float>(cylinder->radius);
+                const float half_length   = static_cast<float>(0.5 * cylinder->length);
+                out_proxy->radius_m       = std::sqrt(radius * radius + half_length * half_length);
                 out_proxy->model_aabb_min = glm::vec3(-radius, -radius, -half_length);
                 out_proxy->model_aabb_max = glm::vec3(radius, radius, half_length);
                 out_proxy->has_model_aabb = out_proxy->radius_m > 1e-6f;
@@ -1431,7 +1431,7 @@ namespace rkv {
             return impl_->cached_collision_proxies;
         }
 
-        impl_->cached_collision_proxies     = impl_->buildLinkCollisionProxies();
+        impl_->cached_collision_proxies      = impl_->buildLinkCollisionProxies();
         impl_->collision_proxies_cache_valid = true;
         return impl_->cached_collision_proxies;
     }

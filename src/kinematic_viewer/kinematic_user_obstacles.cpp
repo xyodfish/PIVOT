@@ -362,9 +362,8 @@ namespace kinematic_viewer {
             return glm::vec3(world_from_local * glm::vec4(clamped, 1.0f));
         }
 
-        void evalLinkVsObstacle(const rkv::RobotScene::LinkCollisionProxy& link, const UserObstacleItem& obs,
-                                float* surface_distance_m, float* center_distance_m, glm::vec3* point_on_link,
-                                glm::vec3* point_on_obstacle) {
+        void evalLinkVsObstacle(const rkv::RobotScene::LinkCollisionProxy& link, const UserObstacleItem& obs, float* surface_distance_m,
+                                float* center_distance_m, glm::vec3* point_on_link, glm::vec3* point_on_obstacle) {
             const glm::vec3 cL = link.world_center;
             const float rL     = std::max(1e-5f, link.radius_m);
 
@@ -612,7 +611,9 @@ namespace kinematic_viewer {
             undo_valid          = true;
             undo_label          = label ? label : "";
         };
-        auto try_update_next_serial = [&]() { UpdateUserObstacleNextSerial(st); };
+        auto try_update_next_serial = [&]() {
+            UpdateUserObstacleNextSerial(st);
+        };
         if (ImGui::Button("撤销上一步") && undo_valid) {
             st->items          = undo_items;
             st->selected_index = undo_selected_index;
@@ -804,22 +805,22 @@ namespace kinematic_viewer {
                 } else {
                     ofs << "obstacles:\n";
                     for (const auto& o : st->items) {
-                    ofs << "  - name: \"" << o.name << "\"\n";
-                    ofs << "    kind: " << ObstacleKindName(o.kind) << "\n";
-                    ofs << "    visible: " << (o.visible ? "true" : "false") << "\n";
-                    ofs << "    color: [" << o.color.x << ", " << o.color.y << ", " << o.color.z << "]\n";
-                    const auto pose = PoseXyzQuatFromObstacle(o);
-                    ofs << "    transform: [" << pose[0] << ", " << pose[1] << ", " << pose[2] << ", " << pose[3] << ", " << pose[4]
-                        << ", " << pose[5] << ", " << pose[6] << "]\n";
-                    if (o.kind == UserObstacleItem::Kind::Sphere) {
-                        ofs << "    radius: " << o.params.x << "\n";
-                    } else if (o.kind == UserObstacleItem::Kind::Cylinder) {
-                        ofs << "    radius: " << o.params.x << "\n";
-                        ofs << "    height: " << o.params.y << "\n";
-                    } else {
-                        ofs << "    size: [" << o.params.x << ", " << o.params.y << ", " << o.params.z << "]\n";
+                        ofs << "  - name: \"" << o.name << "\"\n";
+                        ofs << "    kind: " << ObstacleKindName(o.kind) << "\n";
+                        ofs << "    visible: " << (o.visible ? "true" : "false") << "\n";
+                        ofs << "    color: [" << o.color.x << ", " << o.color.y << ", " << o.color.z << "]\n";
+                        const auto pose = PoseXyzQuatFromObstacle(o);
+                        ofs << "    transform: [" << pose[0] << ", " << pose[1] << ", " << pose[2] << ", " << pose[3] << ", " << pose[4]
+                            << ", " << pose[5] << ", " << pose[6] << "]\n";
+                        if (o.kind == UserObstacleItem::Kind::Sphere) {
+                            ofs << "    radius: " << o.params.x << "\n";
+                        } else if (o.kind == UserObstacleItem::Kind::Cylinder) {
+                            ofs << "    radius: " << o.params.x << "\n";
+                            ofs << "    height: " << o.params.y << "\n";
+                        } else {
+                            ofs << "    size: [" << o.params.x << ", " << o.params.y << ", " << o.params.z << "]\n";
+                        }
                     }
-                }
                     if (ofs.good()) {
                         export_status = std::string("导出成功: ") + final_path + " (共 " + std::to_string(st->items.size()) + " 个)";
                         std::snprintf(export_path_full, sizeof(export_path_full), "%s", final_path.c_str());
@@ -1174,8 +1175,8 @@ namespace kinematic_viewer {
         }
     }
 
-    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene,
-                                               float warning_distance_m, float danger_distance_m, CollisionMonitorResult* result) {
+    void MergeUserObstaclesIntoCollisionResult(const UserObstacleState& obstacles, const rkv::RobotScene& scene, float warning_distance_m,
+                                               float danger_distance_m, CollisionMonitorResult* result) {
         if (result == nullptr || !obstacles.affect_collision) {
             return;
         }

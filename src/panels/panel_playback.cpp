@@ -14,13 +14,11 @@ void rkv_panel_info(RkvPanelInfo* out) {
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
     using JointVec = std::vector<rkv::RobotScene::JointInfo>;
-    kinematic_viewer::RenderPlaybackPanel(
-        static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
-        static_cast<kinematic_viewer::TrajectoryPlayer*>(ctx->playback_player),
-        static_cast<kinematic_viewer::PlaybackStateMachine*>(ctx->playback_sm),
-        static_cast<rkv::RobotScene*>(ctx->scene),
-        *static_cast<const JointVec*>(ctx->joints),
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state));
+    kinematic_viewer::RenderPlaybackPanel(static_cast<kinematic_viewer::DebugPlaybackState*>(ctx->playback_state),
+                                          static_cast<kinematic_viewer::TrajectoryPlayer*>(ctx->playback_player),
+                                          static_cast<kinematic_viewer::PlaybackStateMachine*>(ctx->playback_sm),
+                                          static_cast<rkv::RobotScene*>(ctx->scene), *static_cast<const JointVec*>(ctx->joints),
+                                          static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state));
 }
 
 }  // extern "C"

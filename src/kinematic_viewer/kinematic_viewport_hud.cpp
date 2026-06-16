@@ -12,12 +12,12 @@
 namespace kinematic_viewer {
     namespace {
 
-        constexpr float kHudPad           = 10.0f;
-        constexpr float kHudBgAlpha       = 0.90f;
-        constexpr float kHudBottomHeight    = 105.0f;
-        constexpr ImVec4 kHudAccentCyan     = ImVec4(0.60f, 0.80f, 1.00f, 1.00f);
-        constexpr ImVec4 kHudPanelBg        = ImVec4(0.10f, 0.11f, 0.14f, 0.92f);
-        constexpr ImVec4 kHudPanelBorder    = ImVec4(0.28f, 0.34f, 0.44f, 0.55f);
+        constexpr float kHudPad          = 10.0f;
+        constexpr float kHudBgAlpha      = 0.90f;
+        constexpr float kHudBottomHeight = 105.0f;
+        constexpr ImVec4 kHudAccentCyan  = ImVec4(0.60f, 0.80f, 1.00f, 1.00f);
+        constexpr ImVec4 kHudPanelBg     = ImVec4(0.10f, 0.11f, 0.14f, 0.92f);
+        constexpr ImVec4 kHudPanelBorder = ImVec4(0.28f, 0.34f, 0.44f, 0.55f);
 
         std::string TrajectoryDisplayName(const DebugPlaybackState& playback_state) {
             if (playback_state.selected_trajectory_index >= 0 &&

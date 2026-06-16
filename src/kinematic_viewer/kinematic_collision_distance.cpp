@@ -14,7 +14,7 @@ namespace kinematic_viewer {
         }
 
         glm::vec3 ClosestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b) {
-            const glm::vec3 ab = b - a;
+            const glm::vec3 ab  = b - a;
             const float ab_len2 = glm::dot(ab, ab);
             if (ab_len2 <= kDistanceEpsilon) {
                 return a;
@@ -50,7 +50,7 @@ namespace kinematic_viewer {
 
             const float vc = d1 * d4 - d3 * d2;
             if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
-                const float v = d1 / (d1 - d3 + kDistanceEpsilon);
+                const float v     = d1 / (d1 - d3 + kDistanceEpsilon);
                 const glm::vec3 q = a + v * ab;
                 if (closest_on_triangle != nullptr) {
                     *closest_on_triangle = q;
@@ -70,7 +70,7 @@ namespace kinematic_viewer {
 
             const float vb = d5 * d2 - d1 * d6;
             if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
-                const float w = d2 / (d2 - d6 + kDistanceEpsilon);
+                const float w     = d2 / (d2 - d6 + kDistanceEpsilon);
                 const glm::vec3 q = a + w * ac;
                 if (closest_on_triangle != nullptr) {
                     *closest_on_triangle = q;
@@ -80,7 +80,7 @@ namespace kinematic_viewer {
 
             const float va = d3 * d6 - d5 * d4;
             if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
-                const float w = (d4 - d3) / ((d4 - d3) + (d5 - d6) + kDistanceEpsilon);
+                const float w     = (d4 - d3) / ((d4 - d3) + (d5 - d6) + kDistanceEpsilon);
                 const glm::vec3 q = b + w * (c - b);
                 if (closest_on_triangle != nullptr) {
                     *closest_on_triangle = q;
@@ -192,8 +192,7 @@ namespace kinematic_viewer {
                 for (const auto& edge_b : edges_b) {
                     glm::vec3 closest_a(0.0f);
                     glm::vec3 closest_b(0.0f);
-                    const float distance =
-                        SegmentSegmentDistance(edge_a[0], edge_a[1], edge_b[0], edge_b[1], &closest_a, &closest_b);
+                    const float distance = SegmentSegmentDistance(edge_a[0], edge_a[1], edge_b[0], edge_b[1], &closest_a, &closest_b);
                     consider(distance, closest_a, closest_b);
                 }
             }
@@ -262,9 +261,8 @@ namespace kinematic_viewer {
             for (size_t j = 0; j + 2 < triangles_b.size(); j += 3) {
                 glm::vec3 point_a(0.0f);
                 glm::vec3 point_b(0.0f);
-                const float distance = TriangleTriangleDistance(triangles_a[i], triangles_a[i + 1], triangles_a[i + 2],
-                                                                triangles_b[j], triangles_b[j + 1], triangles_b[j + 2], &point_a,
-                                                                &point_b);
+                const float distance = TriangleTriangleDistance(triangles_a[i], triangles_a[i + 1], triangles_a[i + 2], triangles_b[j],
+                                                                triangles_b[j + 1], triangles_b[j + 2], &point_a, &point_b);
                 if (distance < best) {
                     best   = distance;
                     best_a = point_a;
@@ -307,8 +305,7 @@ namespace kinematic_viewer {
         return result;
     }
 
-    MeshDistanceResult MeshDistanceBetweenLinks(const rkv::RobotScene& scene, const std::string& link_a,
-                                                const std::string& link_b) {
+    MeshDistanceResult MeshDistanceBetweenLinks(const rkv::RobotScene& scene, const std::string& link_a, const std::string& link_b) {
         std::vector<glm::vec3> triangles_a;
         std::vector<glm::vec3> triangles_b;
         scene.appendLinkWorldCollisionTriangles(link_a, &triangles_a);
@@ -316,9 +313,8 @@ namespace kinematic_viewer {
         return MinDistanceBetweenTriangleSoups(triangles_a, triangles_b);
     }
 
-    CollisionPairDistance RefineCollisionPairDistanceWithMesh(const rkv::RobotScene& scene,
-                                                              const CollisionPairDistance& aabb_distance) {
-        CollisionPairDistance result     = aabb_distance;
+    CollisionPairDistance RefineCollisionPairDistanceWithMesh(const rkv::RobotScene& scene, const CollisionPairDistance& aabb_distance) {
+        CollisionPairDistance result           = aabb_distance;
         const MeshDistanceResult mesh_distance = MeshDistanceBetweenLinks(scene, aabb_distance.link_a, aabb_distance.link_b);
         if (!std::isfinite(mesh_distance.distance_m)) {
             return result;
@@ -330,8 +326,8 @@ namespace kinematic_viewer {
     }
 
     CollisionPairDistance BuildCollisionPairDistance(const rkv::RobotScene::LinkCollisionProxy& a,
-                                                     const rkv::RobotScene::LinkCollisionProxy& b,
-                                                     const rkv::RobotScene* scene_for_mesh, bool use_mesh) {
+                                                     const rkv::RobotScene::LinkCollisionProxy& b, const rkv::RobotScene* scene_for_mesh,
+                                                     bool use_mesh) {
         CollisionPairDistance result = BuildCollisionPairDistanceAabb(a, b);
         if (use_mesh && scene_for_mesh != nullptr) {
             return RefineCollisionPairDistanceWithMesh(*scene_for_mesh, result);

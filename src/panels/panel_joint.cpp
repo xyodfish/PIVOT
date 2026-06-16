@@ -12,10 +12,8 @@ void rkv_panel_info(RkvPanelInfo* out) {
 
 void rkv_panel_render(RkvPanelCtx* ctx) {
     using JointVec = std::vector<rkv::RobotScene::JointInfo>;
-    kinematic_viewer::RenderJointPanel(
-        static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
-        static_cast<rkv::RobotScene*>(ctx->scene),
-        *static_cast<const JointVec*>(ctx->joints));
+    kinematic_viewer::RenderJointPanel(static_cast<kinematic_viewer::ViewerState*>(ctx->viewer_state),
+                                       static_cast<rkv::RobotScene*>(ctx->scene), *static_cast<const JointVec*>(ctx->joints));
 }
 
 }  // extern "C"

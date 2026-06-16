@@ -50,8 +50,8 @@ namespace {
                                           float surface_threshold_m, const char* message) {
         if (distance.center_distance_m >= center_threshold_m && distance.surface_distance_m < surface_threshold_m) {
             ++g_failures;
-            std::cerr << "[FAIL] " << message << " (center=" << distance.center_distance_m
-                      << " m, surface=" << distance.surface_distance_m << " m)\n";
+            std::cerr << "[FAIL] " << message << " (center=" << distance.center_distance_m << " m, surface=" << distance.surface_distance_m
+                      << " m)\n";
         }
     }
 
@@ -69,8 +69,8 @@ namespace {
         }
     }
 
-    std::optional<rkv::RobotScene::LinkCollisionProxy> FindProxyByLinkName(
-        const std::vector<rkv::RobotScene::LinkCollisionProxy>& proxies, const std::string& link_name) {
+    std::optional<rkv::RobotScene::LinkCollisionProxy> FindProxyByLinkName(const std::vector<rkv::RobotScene::LinkCollisionProxy>& proxies,
+                                                                           const std::string& link_name) {
         for (const auto& proxy : proxies) {
             if (proxy.link_name == link_name) {
                 return proxy;
@@ -93,10 +93,14 @@ namespace {
 
     void TestSyntheticTriangleSoupDistance() {
         const std::vector<glm::vec3> tri_a = {
-            glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.1f, 0.0f, 0.0f), glm::vec3(0.0f, 0.1f, 0.0f),
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(0.1f, 0.0f, 0.0f),
+            glm::vec3(0.0f, 0.1f, 0.0f),
         };
         const std::vector<glm::vec3> tri_b = {
-            glm::vec3(0.0f, 0.0f, 0.2f), glm::vec3(0.1f, 0.0f, 0.2f), glm::vec3(0.0f, 0.1f, 0.2f),
+            glm::vec3(0.0f, 0.0f, 0.2f),
+            glm::vec3(0.1f, 0.0f, 0.2f),
+            glm::vec3(0.0f, 0.1f, 0.2f),
         };
         const auto result = kinematic_viewer::MinDistanceBetweenTriangleSoups(tri_a, tri_b);
         ExpectTrue(std::fabs(result.distance_m - 0.2f) < 1e-3f, "synthetic triangle soups should be 0.2 m apart");
@@ -119,8 +123,8 @@ namespace {
 
         const auto adjacent = DistanceForLinks(*scene, "leg_link1", "leg_link2");
         ExpectNonNegative(adjacent.surface_distance_m, "adjacent leg links should not report negative distance");
-        std::cout << "  leg_link1 <-> leg_link2: center=" << adjacent.center_distance_m << " m, surface="
-                  << adjacent.surface_distance_m << " m\n";
+        std::cout << "  leg_link1 <-> leg_link2: center=" << adjacent.center_distance_m << " m, surface=" << adjacent.surface_distance_m
+                  << " m\n";
     }
 
     void TestConnectedLinkFilter(rkv::RobotScene* scene) {
@@ -145,8 +149,8 @@ namespace {
             (result.closest_pair.link_a == "torso_base_link" && result.closest_pair.link_b == "head_link2") ||
             (result.closest_pair.link_a == "head_link2" && result.closest_pair.link_b == "torso_base_link");
         ExpectTrue(!reports_connected_leg_pair, "closest pair should not be a filtered connected-link false positive");
-        std::cout << "  closest pair: " << result.closest_pair.link_a << " <-> " << result.closest_pair.link_b
-                  << " (" << result.closest_pair.surface_distance_m << " m)\n";
+        std::cout << "  closest pair: " << result.closest_pair.link_a << " <-> " << result.closest_pair.link_b << " ("
+                  << result.closest_pair.surface_distance_m << " m)\n";
     }
 
 }  // namespace

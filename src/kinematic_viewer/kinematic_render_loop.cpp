@@ -61,8 +61,8 @@ namespace kinematic_viewer {
             style.show_visual_meshes    = ctx.ui_state->show_visual_meshes;
             style.show_collision_bodies = ctx.ui_state->show_collision_bodies;
             style.wireframe_visuals     = ctx.ui_state->show_wireframe;
-            style.hovered_link  = ctx.ui_state->hovered_link;
-            style.selected_link = ctx.ui_state->selected_link;
+            style.hovered_link          = ctx.ui_state->hovered_link;
+            style.selected_link         = ctx.ui_state->selected_link;
         }
 
         if (style.show_collision_bodies) {

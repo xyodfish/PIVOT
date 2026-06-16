@@ -12,6 +12,13 @@
 namespace kinematic_viewer {
     namespace {
 
+        constexpr float kHudPad           = 10.0f;
+        constexpr float kHudBgAlpha       = 0.90f;
+        constexpr float kHudBottomHeight    = 105.0f;
+        constexpr ImVec4 kHudAccentCyan     = ImVec4(0.60f, 0.80f, 1.00f, 1.00f);
+        constexpr ImVec4 kHudPanelBg        = ImVec4(0.10f, 0.11f, 0.14f, 0.92f);
+        constexpr ImVec4 kHudPanelBorder    = ImVec4(0.28f, 0.34f, 0.44f, 0.55f);
+
         std::string TrajectoryDisplayName(const DebugPlaybackState& playback_state) {
             if (playback_state.selected_trajectory_index >= 0 &&
                 playback_state.selected_trajectory_index < static_cast<int>(playback_state.trajectory_files.size())) {
@@ -56,14 +63,14 @@ namespace kinematic_viewer {
             static constexpr int kColorCount = 8;
 
             void Push() {
-                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.07f, 0.10f, 0.94f));
-                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.18f));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.97f, 0.99f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.62f, 0.68f, 0.76f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.14f, 0.18f, 0.24f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.24f, 0.32f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.22f, 0.30f, 0.40f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.45f, 0.72f, 0.97f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, kHudPanelBg);
+                ImGui::PushStyleColor(ImGuiCol_Border, kHudPanelBorder);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.95f, 0.98f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.55f, 0.62f, 0.72f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.16f, 0.19f, 0.26f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.20f, 0.26f, 0.36f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.24f, 0.32f, 0.44f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.45f, 0.68f, 0.94f, 1.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
@@ -102,6 +109,77 @@ namespace kinematic_viewer {
                    ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav;
         }
 
+        void RenderPlaybackBottomBar(const ViewportHudContext& ctx, float bottom_w) {
+            const bool has_playback = ctx.playback_state != nullptr && ctx.playback_sm != nullptr && ctx.playback_player != nullptr &&
+                                      ctx.scene != nullptr && ctx.playback_sm->HasKeyframes();
+
+            const float total = has_playback ? std::max(0.0f, ctx.playback_sm->TotalDuration()) : 0.0f;
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("时间 (s):");
+            ImGui::SameLine();
+            const float reserved_right = 72.0f;
+            ImGui::SetNextItemWidth(std::max(120.0f, bottom_w - 150.0f - reserved_right));
+            if (has_playback) {
+                float scrub_time = ctx.playback_state->play_time;
+                if (ImGui::SliderFloat("##viewport_timeline", &scrub_time, 0.0f, std::max(0.01f, total), "%.2f")) {
+                    ctx.playback_sm->Seek(scrub_time);
+                    ctx.playback_player->SampleAtCurrentTime(*ctx.playback_state, ctx.scene);
+                }
+            } else {
+                ImGui::BeginDisabled();
+                float placeholder = 0.0f;
+                ImGui::SliderFloat("##viewport_timeline_disabled", &placeholder, 0.0f, 1.0f, "%.2f");
+                ImGui::EndDisabled();
+            }
+            ImGui::SameLine();
+            ImGui::TextColored(kHudAccentCyan, "%.2fs", total);
+
+            if (!has_playback) {
+                ImGui::BeginDisabled();
+            }
+            const bool playing = has_playback && ctx.playback_sm->IsPlaying();
+            if (playing) {
+                if (ImGui::Button("暂停")) {
+                    ctx.playback_sm->Pause();
+                }
+            } else {
+                if (ImGui::Button("播放")) {
+                    ctx.playback_sm->Play();
+                }
+            }
+            if (!has_playback) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("速度");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100.0f);
+            if (has_playback) {
+                float speed = ctx.playback_state->play_speed;
+                if (ImGui::SliderFloat("##viewport_speed", &speed, -2.0f, 2.0f, "%.2f")) {
+                    ctx.playback_state->play_speed = speed;
+                }
+            } else {
+                ImGui::BeginDisabled();
+                float speed_placeholder = 1.0f;
+                ImGui::SliderFloat("##viewport_speed_disabled", &speed_placeholder, -2.0f, 2.0f, "%.2f");
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+            if (has_playback) {
+                ImGui::Checkbox("循环", &ctx.playback_state->loop);
+            } else {
+                ImGui::BeginDisabled();
+                bool loop_placeholder = false;
+                ImGui::Checkbox("循环", &loop_placeholder);
+                ImGui::EndDisabled();
+            }
+        }
+
     }  // namespace
 
     void RenderViewportHud(const ViewportHudContext& ctx) {
@@ -109,16 +187,14 @@ namespace kinematic_viewer {
             return;
         }
 
-        const float pad      = 12.0f;
-        const float bottom_h = 56.0f;
-        const float bottom_y = static_cast<float>(ctx.viewport_h) - bottom_h - pad;
-        const float bottom_w = std::max(280.0f, static_cast<float>(ctx.viewport_w) - pad * 2.0f);
+        const float bottom_y = static_cast<float>(ctx.viewport_h) - kHudBottomHeight - kHudPad;
+        const float bottom_w = std::max(320.0f, static_cast<float>(ctx.viewport_w) - kHudPad * 2.0f);
 
         HudPanelStyle hud_style;
         hud_style.Push();
-        ImGui::SetNextWindowBgAlpha(0.94f);
+        ImGui::SetNextWindowBgAlpha(kHudBgAlpha);
 
-        ImGui::SetNextWindowPos(ImVec2(pad, pad), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(kHudPad, kHudPad), ImGuiCond_Always);
         if (ImGui::Begin("##viewport_hud_top", nullptr, HudOverlayFlags())) {
             const std::string traj_name =
                 ctx.playback_state != nullptr ? TrajectoryDisplayName(*ctx.playback_state) : std::string("未加载轨迹");
@@ -161,26 +237,10 @@ namespace kinematic_viewer {
         }
         ImGui::End();
 
-        ImGui::SetNextWindowPos(ImVec2(pad, bottom_y), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(bottom_w, bottom_h), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(kHudPad, bottom_y), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(bottom_w, kHudBottomHeight), ImGuiCond_Always);
         if (ImGui::Begin("##viewport_hud_bottom", nullptr, HudBottomFlags())) {
-            ImGui::PushItemWidth(bottom_w - 24.0f);
-            if (ctx.playback_state != nullptr && ctx.playback_sm != nullptr && ctx.playback_player != nullptr && ctx.scene != nullptr &&
-                ctx.playback_sm->HasKeyframes()) {
-                const float total = std::max(0.0f, ctx.playback_sm->TotalDuration());
-                float scrub_time  = ctx.playback_state->play_time;
-                if (ImGui::SliderFloat("##viewport_timeline", &scrub_time, 0.0f, std::max(0.01f, total), "%.2f s")) {
-                    ctx.playback_sm->Seek(scrub_time);
-                    ctx.playback_player->SampleAtCurrentTime(*ctx.playback_state, ctx.scene);
-                }
-            } else {
-                ImGui::BeginDisabled();
-                float placeholder = 0.0f;
-                ImGui::SliderFloat("##viewport_timeline_disabled", &placeholder, 0.0f, 1.0f, "时间轴");
-                ImGui::EndDisabled();
-            }
-            ImGui::PopItemWidth();
-            ImGui::TextDisabled("Space 播放/暂停  ·  A/D 逐帧  ·  W/S 加减速  ·  H 侧栏  ·  1-9 切页  ·  左键旋转  ·  滚轮缩放");
+            RenderPlaybackBottomBar(ctx, bottom_w);
         }
         ImGui::End();
         hud_style.Pop();

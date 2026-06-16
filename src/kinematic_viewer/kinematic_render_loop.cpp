@@ -29,13 +29,11 @@ namespace kinematic_viewer {
     }
 
     void KinematicRenderLoop::SetupViewportAndClear(const Context& ctx) {
+        (void)ctx;
         glViewport(0, 0, ctx.viewport_w, ctx.viewport_h);
         glEnable(GL_DEPTH_TEST);
-        if (ctx.demo_visual_mode) {
-            glClearColor(0.07f, 0.08f, 0.10f, 1.0f);
-        } else {
-            glClearColor(0.90f, 0.92f, 0.96f, 1.0f);
-        }
+        // Newton ViewerGL sky_lower — dark viewport backdrop.
+        glClearColor(40.0f / 255.0f, 44.0f / 255.0f, 55.0f / 255.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
@@ -43,9 +41,16 @@ namespace kinematic_viewer {
         glUseProgram(shader);
         glUniformMatrix4fv(glGetUniformLocation(shader, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
         glUniformMatrix4fv(glGetUniformLocation(shader, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        const glm::vec3 light_pos = eye + glm::vec3(0.8f, 0.8f, 1.2f);
-        glUniform3f(glGetUniformLocation(shader, "lightPos"), light_pos.x, light_pos.y, light_pos.z);
         glUniform3f(glGetUniformLocation(shader, "viewPos"), eye.x, eye.y, eye.z);
+        // Z-up sun direction (Newton ViewerGL default for up_axis=2).
+        const glm::vec3 sun_dir = glm::normalize(glm::vec3(0.2f, -0.3f, 0.8f));
+        glUniform3f(glGetUniformLocation(shader, "sunDirection"), sun_dir.x, sun_dir.y, sun_dir.z);
+        glUniform3f(glGetUniformLocation(shader, "lightColor"), 1.8f, 1.8f, 1.8f);
+        glUniform3f(glGetUniformLocation(shader, "skyColor"), 0.745f, 0.863f, 0.941f);
+        glUniform3f(glGetUniformLocation(shader, "groundColor"), 0.294f, 0.333f, 0.592f);
+        glUniform1f(glGetUniformLocation(shader, "diffuseScale"), 1.0f);
+        glUniform1f(glGetUniformLocation(shader, "specularScale"), 1.0f);
+        glUniform1i(glGetUniformLocation(shader, "upAxis"), 2);
     }
 
     void KinematicRenderLoop::DrawSceneMeshes(GLuint shader, const Context& ctx, const glm::mat4& proj, const glm::mat4& view) {
@@ -149,7 +154,7 @@ namespace kinematic_viewer {
         }
         float half = ctx.ui_state->grid_size;
         int count  = std::max(2, ctx.ui_state->grid_count);
-        glm::vec3 grid_col(0.72f, 0.76f, 0.82f);
+        glm::vec3 grid_col(0.30f, 0.34f, 0.42f);
         for (int i = 0; i <= count; ++i) {
             float t = -half + 2.0f * half * (static_cast<float>(i) / static_cast<float>(count));
             out->push_back({glm::vec3(-half, t, 0.0f), grid_col});

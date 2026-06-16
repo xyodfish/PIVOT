@@ -58,7 +58,7 @@ namespace rkv {
 
         std::string cjk_font_path = "";
         float cjk_font_size       = 18.0f;
-        std::string theme_preset  = "current_dark";  // current_dark | moonlight | spectrum_light
+        std::string theme_preset  = "newton";  // current_dark | moonlight | spectrum_light | newton
         // Enable planar chassis gizmo only for robots matched by keywords.
         bool enable_mobile_base_drag                = true;
         std::vector<std::string> mobile_base_robots = {"galbot_g1"};

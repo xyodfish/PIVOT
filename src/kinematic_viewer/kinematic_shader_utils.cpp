@@ -28,24 +28,61 @@ void main() {
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
-uniform vec3 lightPos;
 uniform vec3 viewPos;
 uniform vec3 diffuseColor;
+uniform vec3 sunDirection;
+uniform vec3 lightColor;
+uniform vec3 skyColor;
+uniform vec3 groundColor;
+uniform float diffuseScale;
+uniform float specularScale;
+uniform int upAxis;
 uniform bool hasTexture;
 uniform float materialAlpha;
 uniform sampler2D texture_diffuse1;
 out vec4 color;
+
+const float PI = 3.14159265359;
+
+vec3 toLinear(vec3 c) {
+    return pow(max(c, vec3(0.0)), vec3(2.2));
+}
+
+vec3 toSrgb(vec3 c) {
+    return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+}
+
 void main() {
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * diffuseColor;
-    vec3 ambient = 0.58 * diffuseColor;
-    vec3 result = ambient + diffuse;
+    vec3 albedo = toLinear(diffuseColor);
     if (hasTexture) {
-        result *= texture(texture_diffuse1, TexCoords).rgb;
+        albedo *= toLinear(texture(texture_diffuse1, TexCoords).rgb);
     }
-    color = vec4(result, materialAlpha);
+
+    vec3 N = normalize(Normal);
+    vec3 V = normalize(viewPos - FragPos);
+    vec3 L = normalize(sunDirection);
+    vec3 H = normalize(V + L);
+
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+
+    float shininess = 64.0;
+    float normFactor = (shininess + 2.0) / (8.0 * PI);
+    vec3 F0 = vec3(0.04);
+    vec3 diffuse = albedo * lightColor * NdotL * 2.5 * diffuseScale;
+    vec3 spec = F0 * lightColor * normFactor * pow(NdotH, shininess) * NdotL * specularScale;
+
+    vec3 up = vec3(0.0, 0.0, 1.0);
+    if (upAxis == 0) {
+        up = vec3(1.0, 0.0, 0.0);
+    } else if (upAxis == 1) {
+        up = vec3(0.0, 1.0, 0.0);
+    }
+    float sky_fac = dot(N, up) * 0.5 + 0.5;
+    vec3 ambient = mix(toLinear(groundColor), toLinear(skyColor), sky_fac) * albedo;
+
+    vec3 lit = ambient + diffuse + spec;
+    color = vec4(toSrgb(lit), materialAlpha);
 }
 )";
 

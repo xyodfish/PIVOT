@@ -23,7 +23,7 @@ ui:
   fix_base_like_mujoco: false
   cjk_font_path: ""
   cjk_font_size: 18.0
-  theme_preset: "moonlight" # current_dark | moonlight | spectrum_light
+  theme_preset: "newton" # current_dark | moonlight | spectrum_light | newton
   enable_mobile_base_drag: true
   # Match URDF filename substrings (case-insensitive), e.g. galbot_one_golf.urdf
   mobile_base_robots: ["galbot_g1", "galbot_one_golf", "galbot"]

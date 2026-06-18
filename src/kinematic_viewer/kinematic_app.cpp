@@ -39,7 +39,7 @@ namespace kinematic_viewer {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-        window_ = glfwCreateWindow(cfg.window.width, cfg.window.height, "Robot Kinematic Debug Viewer", nullptr, nullptr);
+        window_ = glfwCreateWindow(cfg.window.width, cfg.window.height, "PIVOT", nullptr, nullptr);
         if (!window_) {
             result.error = "create window failed";
             glfwTerminate();

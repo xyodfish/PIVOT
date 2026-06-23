@@ -313,8 +313,8 @@ namespace kinematic_viewer {
                                             static_cast<float>(frame->viewport_w) / static_cast<float>(frame->viewport_h), 0.05f, 80.0f);
         frame->pick_view = camera.viewMatrix();
 
-        frame->hover_for_joint_drag = ui_state.enable_joint_drag_rotation && !input_ctx->ik_gizmo_using && !input_ctx->obs_gizmo_using &&
-                                      !input_ctx->imgui_wants_mouse;
+        frame->hover_for_joint_drag = ui_state.enable_joint_drag_rotation && !input_ctx->left_mouse_down && !input_handler.IsJointDragActive() &&
+                                      !input_ctx->ik_gizmo_using && !input_ctx->obs_gizmo_using && !input_ctx->imgui_wants_mouse;
         if (frame->hover_for_joint_drag || ui_state.enable_link_hover_highlight) {
             auto link_hover = input_handler.UpdateLinkHover(*input_ctx, frame->pick_view, frame->pick_proj, &scene, glfwGetTime(),
                                                             frame->hover_for_joint_drag);

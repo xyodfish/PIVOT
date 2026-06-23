@@ -4,19 +4,19 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")"; pwd)
 PROJECT_DIR="$SCRIPT_DIR/.."
 
-SRC_BIN_PATH="$PROJECT_DIR/bin/robot_kinematic_viewer"
+SRC_BIN_PATH="$PROJECT_DIR/bin/PIVOT_VIEWER"
 SRC_CFG_PATH="$PROJECT_DIR/config"
 SRC_DOC_PATH="$PROJECT_DIR/docs"
 SRC_SHADER_PATH="$PROJECT_DIR/shader"
 
-STAGE_DIR="$PROJECT_DIR/robot_kinematic_viewer_release"
+STAGE_DIR="$PROJECT_DIR/PIVOT_VIEWER_release"
 TARGET_BIN_DIR="$STAGE_DIR/bin"
 TARGET_LIB_DIR="$STAGE_DIR/lib"
 TARGET_CFG_DIR="$STAGE_DIR/config"
 TARGET_FONT_DIR="$STAGE_DIR/fonts"
 
 RUN_SCRIPT_PATH="$STAGE_DIR/run.sh"
-TEMP_FILE="/tmp/robot_kinematic_viewer_deps.txt"
+TEMP_FILE="/tmp/PIVOT_VIEWER_deps.txt"
 
 ensure_dir_exists() {
     local dir="$1"

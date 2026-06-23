@@ -854,7 +854,10 @@ namespace kinematic_viewer {
         SidebarCheckboxRow4("关节轴", &uiState->show_axes, "仅旋转轴", &uiState->show_revolute_only, "非旋转轴",
                             &uiState->show_non_revolute, "世界轴", &uiState->show_world_axes);
         ImGui::Checkbox("固定底座", &uiState->lock_base);
-        ImGui::Checkbox("Link悬停高亮", &uiState->enable_link_hover_highlight);
+        if (ImGui::Checkbox("Link悬停高亮", &uiState->enable_link_hover_highlight) && !uiState->enable_link_hover_highlight) {
+            uiState->enable_joint_drag_rotation = false;
+            uiState->hovered_link.clear();
+        }
         if (ImGui::Checkbox("3D点选Link", &uiState->enable_link_click_select) && !uiState->enable_link_click_select) {
             uiState->selected_link.clear();
         }

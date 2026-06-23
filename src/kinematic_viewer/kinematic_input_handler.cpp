@@ -5,12 +5,22 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
+#include <queue>
+#include <unordered_set>
 
 namespace kinematic_viewer {
 
     namespace {
 
         constexpr float kJointDragRadPerPixel = 0.012f;
+
+        bool PreferAccurateJointDragPick(const rkv::RobotScene* scene) {
+            if (scene == nullptr) {
+                return false;
+            }
+            const std::string& urdf_path = scene->urdfFilePath();
+            return urdf_path.find("unitree_g1") != std::string::npos || urdf_path.find("g1_custom_collision_29dof") != std::string::npos;
+        }
 
         bool ComputeWorldRayFromScreen(float mouse_x, float mouse_y, int viewport_w, int viewport_h, const glm::mat4& view,
                                        const glm::mat4& proj, glm::vec3* out_origin, glm::vec3* out_dir) {
@@ -93,37 +103,76 @@ namespace kinematic_viewer {
             return true;
         }
 
-        bool TryStartJointDragOnLink(rkv::RobotScene* scene, const std::string& link_name, std::string* out_joint_name) {
-            if (scene == nullptr || out_joint_name == nullptr || link_name.empty()) {
+        bool ResolveDraggableJointForLink(rkv::RobotScene* scene, const std::string& link_name, std::string* out_link_name,
+                                          std::string* out_joint_name) {
+            if (scene == nullptr || out_joint_name == nullptr || out_link_name == nullptr || link_name.empty()) {
                 return false;
             }
-            std::string joint_name;
-            if (!scene->getParentJointNameForLink(link_name, &joint_name)) {
-                return false;
+
+            std::string cur_link = link_name;
+            for (int depth = 0; depth < 8 && !cur_link.empty(); ++depth) {
+                std::string joint_name;
+                if (scene->getParentJointNameForLink(cur_link, &joint_name)) {
+                    rkv::RobotScene::JointInfo joint_info;
+                    if (scene->getJointInfo(joint_name, &joint_info) && joint_info.revolute) {
+                        *out_link_name  = std::move(cur_link);
+                        *out_joint_name = std::move(joint_name);
+                        return true;
+                    }
+                }
+
+                std::string parent_link;
+                if (!scene->getLinkParentName(cur_link, &parent_link)) {
+                    break;
+                }
+                cur_link = std::move(parent_link);
             }
-            rkv::RobotScene::JointInfo joint_info;
-            if (!scene->getJointInfo(joint_name, &joint_info) || !joint_info.revolute) {
-                return false;
+
+            std::queue<std::string> q;
+            std::unordered_set<std::string> visited;
+            q.push(link_name);
+            visited.insert(link_name);
+
+            const auto tfs = scene->getLinkTfInfos();
+            int depth      = 0;
+            while (!q.empty() && depth < 8) {
+                const size_t level_size = q.size();
+                for (size_t i = 0; i < level_size; ++i) {
+                    const std::string cur = q.front();
+                    q.pop();
+                    for (const auto& tf : tfs) {
+                        if (tf.parent_name != cur || !visited.insert(tf.name).second) {
+                            continue;
+                        }
+                        std::string joint_name;
+                        if (scene->getParentJointNameForLink(tf.name, &joint_name)) {
+                            rkv::RobotScene::JointInfo joint_info;
+                            if (scene->getJointInfo(joint_name, &joint_info) && joint_info.revolute) {
+                                *out_link_name  = tf.name;
+                                *out_joint_name = std::move(joint_name);
+                                return true;
+                            }
+                        }
+                        q.push(tf.name);
+                    }
+                }
+                ++depth;
             }
-            *out_joint_name = std::move(joint_name);
-            return true;
+            return false;
         }
 
         bool PickLinkAtCursor(rkv::RobotScene* scene, const kinematic_viewer::KinematicInputHandler::UpdateContext& ctx,
-                              const glm::mat4& view, const glm::mat4& proj, std::string* out_link_name) {
+                              const glm::mat4& view, const glm::mat4& proj, std::string* out_link_name, bool accurate) {
             if (scene == nullptr || out_link_name == nullptr) {
                 return false;
-            }
-            if (ctx.hovered_link != nullptr && !ctx.hovered_link->empty()) {
-                *out_link_name = *ctx.hovered_link;
-                return true;
             }
             glm::vec3 ray_o(0.0f), ray_d(0.0f);
             if (!ComputeWorldRayFromScreen(static_cast<float>(ctx.mouse_x), static_cast<float>(ctx.mouse_y), ctx.viewport_w, ctx.viewport_h,
                                            view, proj, &ray_o, &ray_d)) {
                 return false;
             }
-            return scene->pickLinkByRay(ray_o, ray_d, out_link_name, nullptr, rkv::RobotScene::LinkPickMode::Fast);
+            return scene->pickLinkByRay(ray_o, ray_d, out_link_name, nullptr,
+                                        accurate ? rkv::RobotScene::LinkPickMode::Accurate : rkv::RobotScene::LinkPickMode::Fast);
         }
 
         bool LookupJointAxis(const rkv::RobotScene* scene, const std::string& joint_name, glm::vec3* out_origin, glm::vec3* out_axis) {
@@ -198,7 +247,7 @@ namespace kinematic_viewer {
         const bool any_popup_open = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
         // ImGui has priority: if UI is consuming mouse (or any modal/popup is up), don't move camera.
         bool block_camera = ctx.panel_resize_active || ctx.ik_dragging_marker || ctx.ik_gizmo_using || ctx.obs_gizmo_using ||
-                            ctx.joint_drag_active || (ctx.left_mouse_down && ctx.hovered_link_draggable) || ctx.imgui_wants_mouse ||
+                            ctx.joint_drag_active || ctx.imgui_wants_mouse ||
                             any_popup_open;
 
         if (!mouse_in_viewport || block_camera) {
@@ -386,15 +435,22 @@ namespace kinematic_viewer {
         const bool left_released = !ctx.left_mouse_down && joint_drag_left_prev_;
         joint_drag_left_prev_    = ctx.left_mouse_down;
 
-        if (left_pressed && !joint_drag_active_) {
+        if (left_pressed && !joint_drag_active_ && ctx.hovered_link != nullptr && !ctx.hovered_link->empty()) {
             std::string picked_link;
-            if (PickLinkAtCursor(scene, ctx, view, proj, &picked_link)) {
+            const bool prefer_accurate = PreferAccurateJointDragPick(scene);
+            const bool picked = prefer_accurate
+                                    ? (PickLinkAtCursor(scene, ctx, view, proj, &picked_link, true) ||
+                                       PickLinkAtCursor(scene, ctx, view, proj, &picked_link, false))
+                                    : (PickLinkAtCursor(scene, ctx, view, proj, &picked_link, false) ||
+                                       PickLinkAtCursor(scene, ctx, view, proj, &picked_link, true));
+            if (picked) {
                 std::string joint_name;
-                if (TryStartJointDragOnLink(scene, picked_link, &joint_name)) {
+                std::string drag_link_name;
+                if (ResolveDraggableJointForLink(scene, picked_link, &drag_link_name, &joint_name)) {
                     joint_drag_active_             = true;
                     joint_drag_suppress_link_pick_ = true;
                     joint_drag_joint_name_         = std::move(joint_name);
-                    joint_drag_link_name_          = std::move(picked_link);
+                    joint_drag_link_name_          = std::move(drag_link_name);
                     joint_drag_last_mouse_x_       = ctx.mouse_x;
                     joint_drag_last_mouse_y_       = ctx.mouse_y;
                     result.started                 = true;

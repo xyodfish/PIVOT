@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(robot_kinematic_viewer VERSION 0.0.1)
+project(PIVOT VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "The target C++ standard.")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -103,12 +103,12 @@ add_library(imguizmo SHARED deps/imguizmo/ImGuizmo.cpp)
 target_link_libraries(imguizmo PUBLIC imgui)
 target_include_directories(imguizmo PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui" "${CMAKE_CURRENT_SOURCE_DIR}/deps/imguizmo")
 
-add_library(flex_ik_core src/ik_backends/flex_ik/flex_ik.cc)
+add_library(flex_ik_core SHARED src/ik_backends/flex_ik/flex_ik.cc)
 target_include_directories(flex_ik_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/ik_backends/flex_ik")
 target_link_libraries(flex_ik_core PUBLIC Eigen3::Eigen pinocchio::pinocchio)
 set_target_properties(flex_ik_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(wbc_chain_ik_core
+add_library(wbc_chain_ik_core SHARED
     src/ik_backends/wbc_chain_ik/robot/traits/chain_ik.cpp
     src/ik_backends/wbc_chain_ik/solver/hqp_solver.cpp
     src/ik_backends/wbc_chain_ik/solver/qp_solver.cpp
@@ -119,7 +119,7 @@ target_link_libraries(wbc_chain_ik_core PUBLIC Eigen3::Eigen pinocchio::pinocchi
 set_target_properties(wbc_chain_ik_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Velocity Planning Library (from trajectory_planner_utils)
-add_library(velocity_planning
+add_library(velocity_planning SHARED
     deps/vp/src/trapezoidal/trapezoidal_planner.cpp
     deps/vp/src/double_s/double_s_planner.cpp
     deps/vp/src/double_s/double_s_multi_planner.cpp
@@ -277,16 +277,16 @@ list(APPEND RKV_PANEL_TARGETS rkv_panel_point_cloud)
 # ---------------------------------------------------------------------------
 # Main executable — only app glue + glad; everything else is in rkv_viewer_core
 # ---------------------------------------------------------------------------
-add_executable(robot_kinematic_viewer
+add_executable(PIVOT_VIEWER
     src/robot_kinematic_viewer.cpp
     src/kinematic_viewer/kinematic_app.cpp
     src/kinematic_viewer/kinematic_bootstrap.cpp
     deps/glad/glad.c
 )
 
-target_link_libraries(robot_kinematic_viewer PRIVATE rkv_viewer_core)
-add_dependencies(robot_kinematic_viewer ${RKV_PANEL_TARGETS})
-set_target_properties(robot_kinematic_viewer PROPERTIES
+target_link_libraries(PIVOT_VIEWER PRIVATE rkv_viewer_core)
+add_dependencies(PIVOT_VIEWER ${RKV_PANEL_TARGETS})
+set_target_properties(PIVOT_VIEWER PROPERTIES
     BUILD_RPATH "${PROJECT_SOURCE_DIR}/lib;${ROOT_DEVEL_ARCH_PATH}/lib"
     INSTALL_RPATH "$ORIGIN/../lib")
 
@@ -320,8 +320,8 @@ if(RKV_PCL_FOUND)
         INSTALL_RPATH "$ORIGIN/../lib")
 
     target_compile_definitions(rkv_viewer_core PUBLIC RKV_HAS_PCL=1)
-    target_compile_definitions(robot_kinematic_viewer PRIVATE RKV_HAS_PCL=1)
-    add_dependencies(robot_kinematic_viewer rkv_point_cloud_pcl)
+    target_compile_definitions(PIVOT_VIEWER PRIVATE RKV_HAS_PCL=1)
+    add_dependencies(PIVOT_VIEWER rkv_point_cloud_pcl)
     message(STATUS "Point cloud: PCL plugin rkv_point_cloud_pcl (${RKV_PCL_LIBS})")
 else()
     message(WARNING "PCL libraries not found under ${ROOT_DEVEL_ARCH_PATH}/lib — point cloud loading disabled")

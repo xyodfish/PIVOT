@@ -88,7 +88,7 @@ namespace kinematic_viewer {
         // Left-click a revolute joint's child link, then drag to rotate the joint.
         JointDragResult UpdateJointDrag(const UpdateContext& ctx, const glm::mat4& view, const glm::mat4& proj, rkv::RobotScene* scene);
 
-        bool IsJointDragActive() const { return joint_drag_active_; }
+        bool IsJointDragActive() const { return joint_drag_active_ || !joint_drag_pending_link_name_.empty(); }
 
         // Handle sidebar page hotkeys (1-9), bounded by visible tab count.
         int HandleSidebarHotkeys(int current_page, int page_count, bool enable_hotkeys);
@@ -120,10 +120,13 @@ namespace kinematic_viewer {
         bool joint_drag_active_             = false;
         bool joint_drag_suppress_link_pick_ = false;
         bool joint_drag_left_prev_          = false;
+        double joint_drag_press_mouse_x_    = 0.0;
+        double joint_drag_press_mouse_y_    = 0.0;
         double joint_drag_last_mouse_x_     = 0.0;
         double joint_drag_last_mouse_y_     = 0.0;
         std::string joint_drag_joint_name_;
         std::string joint_drag_link_name_;
+        std::string joint_drag_pending_link_name_;
         float playback_step_accumulator_                     = 0.0f;
         static constexpr double kLinkHoverIntervalSec        = 0.05;
         static constexpr double kLinkPickDragThresholdPx     = 6.0;
